@@ -12,8 +12,6 @@ import java.util.List;
 /**
  * Request object for updating trainer workload
  */
-@NoArgsConstructor
-@AllArgsConstructor
 public class WorkloadUpdateRequest {
 
     @NotBlank(message = "Trainer username is required")
@@ -35,6 +33,22 @@ public class WorkloadUpdateRequest {
 
     @NotNull(message = "Action type is required")
     private ActionType actionType;
+
+    public WorkloadUpdateRequest() {
+    }
+
+    // All-args constructor
+    public WorkloadUpdateRequest(String username, String firstName, String lastName,
+                                 boolean isActive, LocalDate trainingDate,
+                                 int trainingDuration, ActionType actionType) {
+        this.username = username;
+        this.firstName = firstName;
+        this.lastName = lastName;
+        this.isActive = isActive;
+        this.trainingDate = trainingDate;
+        this.trainingDuration = trainingDuration;
+        this.actionType = actionType;
+    }
 
     // Custom Getter and Setter for 'username'
     public String getUsername() {

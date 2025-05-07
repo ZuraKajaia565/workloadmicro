@@ -14,8 +14,6 @@ import java.util.Map;
  * TrainerWorkload represents a trainer's monthly workout summary
  */
 @Entity
-@NoArgsConstructor
-@AllArgsConstructor
 public class TrainerWorkload {
 
     @Id
@@ -27,6 +25,29 @@ public class TrainerWorkload {
 
     @OneToMany(mappedBy = "trainer", cascade = CascadeType.ALL, orphanRemoval = true)
     private List<YearSummary> years = new ArrayList<>();
+
+
+    public TrainerWorkload() {
+    }
+
+    // All-args constructor
+    public TrainerWorkload(String username, String firstName, String lastName, boolean isActive, List<YearSummary> years) {
+        this.username = username;
+        this.firstName = firstName;
+        this.lastName = lastName;
+        this.isActive = isActive;
+        this.years = years;
+    }
+
+    // Constructor without years list
+    public TrainerWorkload(String username, String firstName, String lastName, boolean isActive) {
+        this.username = username;
+        this.firstName = firstName;
+        this.lastName = lastName;
+        this.isActive = isActive;
+        this.years = new ArrayList<>();
+    }
+
 
     // Custom Getter and Setter for 'username'
     public String getUsername() {

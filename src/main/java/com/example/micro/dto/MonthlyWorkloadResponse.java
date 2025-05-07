@@ -1,16 +1,8 @@
 package com.example.micro.dto;
 
-import lombok.AllArgsConstructor;
-import lombok.NoArgsConstructor;
-import lombok.Getter;
-import lombok.Setter;
-
 /**
  * Response object for monthly workload
  */
-@NoArgsConstructor
-@Getter
-@Setter
 public class MonthlyWorkloadResponse {
 
     private String username;
@@ -20,6 +12,10 @@ public class MonthlyWorkloadResponse {
     private int year;
     private int month;
     private int summaryDuration;
+
+    public MonthlyWorkloadResponse() {
+    }
+
     public MonthlyWorkloadResponse(String username, String firstName, String lastName,
                                    boolean active, int year, int month, int duration) {
         this.username = username;
@@ -29,5 +25,61 @@ public class MonthlyWorkloadResponse {
         this.year = year;
         this.month = month;
         this.summaryDuration = duration;
+    }
+
+    public String getUsername() {
+        return username;
+    }
+
+    public void setUsername(String username) {
+        this.username = username;
+    }
+
+    public String getFirstName() {
+        return firstName;
+    }
+
+    public void setFirstName(String firstName) {
+        this.firstName = firstName;
+    }
+
+    public String getLastName() {
+        return lastName;
+    }
+
+    public void setLastName(String lastName) {
+        this.lastName = lastName;
+    }
+
+    public boolean isActive() {
+        return isActive;
+    }
+
+    public void setActive(boolean active) {
+        isActive = active;
+    }
+
+    public int getYear() {
+        return year;
+    }
+
+    public void setYear(int year) {
+        this.year = year;
+    }
+
+    public int getMonth() {
+        return month;
+    }
+
+    public void setMonth(int month) {
+        this.month = month;
+    }
+
+    public int getSummaryDuration() {
+        return summaryDuration;
+    }
+
+    public void setSummaryDuration(int summaryDuration) {
+        this.summaryDuration = summaryDuration;
     }
 }
