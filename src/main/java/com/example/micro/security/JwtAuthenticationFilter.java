@@ -20,6 +20,7 @@ import org.springframework.security.core.authority.SimpleGrantedAuthority;
 import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.security.core.userdetails.User;
 import org.springframework.security.core.userdetails.UserDetails;
+import org.springframework.security.web.authentication.WebAuthenticationDetailsSource;
 import org.springframework.stereotype.Component;
 import org.springframework.web.filter.OncePerRequestFilter;
 
@@ -59,22 +60,29 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
 
         try {
             final String username = extractUsername(jwt);
-            if (isTokenValid(jwt)) {
-                logger.error("zura");
-                Collection<SimpleGrantedAuthority> authorities = extractAuthorities(jwt);
-                UserDetails userDetails = new User(username, "", authorities);
-                UsernamePasswordAuthenticationToken authToken = new UsernamePasswordAuthenticationToken(
-                        userDetails,
-                        null,
-                        userDetails.getAuthorities()
-                );
 
-                // ✅ ADD THIS LINE:
-                SecurityContextHolder.getContext().setAuthentication(authToken);
+            // Only process if we have a username and no authentication yet
+            if (username != null && SecurityContextHolder.getContext().getAuthentication() == null) {
+                if (isTokenValid(jwt)) {
+                    logger.debug("Token is valid for user: {}", username);
+
+                    Collection<SimpleGrantedAuthority> authorities = extractAuthorities(jwt);
+                    UserDetails userDetails = new User(username, "", authorities);
+
+                    UsernamePasswordAuthenticationToken authToken = new UsernamePasswordAuthenticationToken(
+                            userDetails,
+                            null,
+                            userDetails.getAuthorities()
+                    );
+
+                    // Set authentication details from request
+                    authToken.setDetails(new WebAuthenticationDetailsSource().buildDetails(request));
+
+                    // Set authentication in context
+                    SecurityContextHolder.getContext().setAuthentication(authToken);
+                    logger.debug("Authentication set for user: {}", username);
+                }
             }
-
-
-
         } catch (ExpiredJwtException e) {
             logger.error("JWT token is expired: {}", e.getMessage());
         } catch (UnsupportedJwtException e) {
