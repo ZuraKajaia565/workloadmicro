@@ -10,6 +10,11 @@ import java.util.Optional;
 
 @Repository
 public interface YearSummaryRepository extends JpaRepository<YearSummary, Long> {
-    @Query("SELECT ys FROM YearSummary ys WHERE ys.trainer.username = :username AND ys.year = :year")
-    Optional<YearSummary> findByTrainerUsernameAndYear(@Param("username") String username, @Param("year") int year);
+
+    @Query("SELECT ys FROM YearSummary ys " +
+            "WHERE ys.trainerUsername = :username " +
+            "AND ys.year = :year")
+    Optional<YearSummary> findByTrainerUsernameAndYear(
+            @Param("username") String username,
+            @Param("year") int year);
 }

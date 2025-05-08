@@ -1,6 +1,8 @@
+// TransactionLoggingFilter.java
 package com.example.micro.logging;
 
-import jakarta.servlet.*;
+import jakarta.servlet.FilterChain;
+import jakarta.servlet.ServletException;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
 import org.slf4j.Logger;
@@ -8,11 +10,8 @@ import org.slf4j.LoggerFactory;
 import org.slf4j.MDC;
 import org.springframework.stereotype.Component;
 import org.springframework.web.filter.OncePerRequestFilter;
-import org.springframework.web.util.ContentCachingRequestWrapper;
-import org.springframework.web.util.ContentCachingResponseWrapper;
 
 import java.io.IOException;
-import java.io.UnsupportedEncodingException;
 import java.util.UUID;
 
 @Component
@@ -38,81 +37,24 @@ public class TransactionLoggingFilter extends OncePerRequestFilter {
         // Set the transaction ID in MDC
         MDC.put(TRANSACTION_ID, transactionId);
 
-        // Wrap the request and response to capture body content
-        ContentCachingRequestWrapper requestWrapper = new ContentCachingRequestWrapper(request);
-        ContentCachingResponseWrapper responseWrapper = new ContentCachingResponseWrapper(response);
-
         // Set the transaction ID in the response header for downstream services
-        responseWrapper.setHeader("X-Transaction-ID", transactionId);
+        response.setHeader("X-Transaction-ID", transactionId);
 
         try {
-            // Log the incoming request
-            logRequest(requestWrapper, transactionId);
+            // Log the incoming request (but don't include sensitive information)
+            logger.info("Received {} request to {}",
+                    request.getMethod(),
+                    request.getRequestURI());
 
             // Proceed with the request
-            filterChain.doFilter(requestWrapper, responseWrapper);
+            filterChain.doFilter(request, response);
 
             // Log the outgoing response
-            logResponse(requestWrapper, responseWrapper, transactionId);
+            logger.info("Completed request with status {}",
+                    response.getStatus());
         } finally {
-            // Copy content to the original response
-            responseWrapper.copyBodyToResponse();
-
             // Clear MDC
             MDC.clear();
         }
-    }
-
-    private void logRequest(ContentCachingRequestWrapper request, String transactionId) {
-        String method = request.getMethod();
-        String uri = request.getRequestURI();
-        String queryString = request.getQueryString();
-
-        if (queryString != null) {
-            uri += "?" + queryString;
-        }
-
-        // Transaction level logging
-        logger.info("Transaction ID: {} - Received {} request to {}", transactionId, method, uri);
-
-        // Operation level logging (more detailed, includes headers etc.)
-        if (logger.isDebugEnabled()) {
-            logger.debug("Transaction ID: {} - Request details: Method={}, URI={}, Content-Type={}, Content-Length={}",
-                    transactionId, method, uri, request.getContentType(), request.getContentLength());
-        }
-    }
-
-    private void logResponse(ContentCachingRequestWrapper request, ContentCachingResponseWrapper response, String transactionId) {
-        int status = response.getStatus();
-        String method = request.getMethod();
-        String uri = request.getRequestURI();
-
-        // Transaction level logging
-        logger.info("Transaction ID: {} - Completed {} request to {} with status {}",
-                transactionId, method, uri, status);
-
-        // Operation level logging (more detailed)
-        if (logger.isDebugEnabled()) {
-            logger.debug("Transaction ID: {} - Response details: Status={}, Content-Type={}, Content-Length={}",
-                    transactionId, status, response.getContentType(), response.getContentSize());
-
-            // Log response body for debugging (be cautious with sensitive data)
-            byte[] content = response.getContentAsByteArray();
-            if (content.length > 0 && isTextBasedContentType(response.getContentType())) {
-                try {
-                    String contentAsString = new String(content, response.getCharacterEncoding());
-                    logger.trace("Transaction ID: {} - Response body:\n{}", transactionId, contentAsString);
-                } catch (UnsupportedEncodingException e) {
-                    logger.warn("Transaction ID: {} - Could not log response body: {}", transactionId, e.getMessage());
-                }
-            }
-        }
-    }
-
-    private boolean isTextBasedContentType(String contentType) {
-        return contentType != null && (
-                contentType.startsWith("text/") ||
-                        contentType.startsWith("application/json") ||
-                        contentType.startsWith("application/xml"));
     }
 }

@@ -3,7 +3,6 @@ package com.example.micro.model;
 import jakarta.persistence.*;
 import java.util.ArrayList;
 import java.util.List;
-import lombok.*;
 
 /**
  * YearSummary represents a year of workout summaries
@@ -11,17 +10,18 @@ import lombok.*;
 @Entity
 public class YearSummary {
 
-  @Id @GeneratedValue(strategy = GenerationType.IDENTITY) private Long id;
+  @Id
+  @GeneratedValue(strategy = GenerationType.IDENTITY)
+  private Long id;
 
-  @Column(name = "\"year\"") // Escape the column name with double quotes
+  @Column(name = "\"year\"")
   private int year;
 
-  @ManyToOne
-  @JoinColumn(name = "trainer_username")
-  private TrainerWorkload trainer;
+  @Column(name = "trainer_username")
+  private String trainerUsername;
 
-  @OneToMany(mappedBy = "yearSummary", cascade = CascadeType.ALL,
-             orphanRemoval = true)
+  @OneToMany(cascade = CascadeType.ALL, orphanRemoval = true)
+  @JoinColumn(name = "year_id")
   private List<MonthSummary> months = new ArrayList<>();
 
   // No-args constructor
@@ -29,34 +29,49 @@ public class YearSummary {
   }
 
   // All-args constructor
-  public YearSummary(Long id, int year, TrainerWorkload trainer, List<MonthSummary> months) {
+  public YearSummary(Long id, int year, String trainerUsername, List<MonthSummary> months) {
     this.id = id;
     this.year = year;
-    this.trainer = trainer;
-    this.months = months;
+    this.trainerUsername = trainerUsername;
+    this.months = months != null ? months : new ArrayList<>();
   }
 
-  // Custom Getter and Setter for 'id'
-  public Long getId() { return id; }
+  // Getters and setters
+  public Long getId() {
+    return id;
+  }
 
-  public void setId(Long id) { this.id = id; }
+  public void setId(Long id) {
+    this.id = id;
+  }
 
-  // Custom Getter and Setter for 'year'
-  public int getYear() { return year; }
+  public int getYear() {
+    return year;
+  }
 
-  public void setYear(int year) { this.year = year; }
+  public void setYear(int year) {
+    this.year = year;
+  }
 
-  // Custom Getter and Setter for 'trainer'
-  public TrainerWorkload getTrainer() { return trainer; }
+  public String getTrainerUsername() {
+    return trainerUsername;
+  }
 
-  public void setTrainer(TrainerWorkload trainer) { this.trainer = trainer; }
+  public void setTrainerUsername(String trainerUsername) {
+    this.trainerUsername = trainerUsername;
+  }
 
-  // Custom Getter and Setter for 'months'
-  public List<MonthSummary> getMonths() { return months; }
+  public List<MonthSummary> getMonths() {
+    return months;
+  }
 
-  public void setMonths(List<MonthSummary> months) { this.months = months; }
+  public void setMonths(List<MonthSummary> months) {
+    this.months = months != null ? months : new ArrayList<>();
+  }
 
-  // Custom method to get or create a MonthSummary for a specific month
+  /**
+   * Gets or creates a MonthSummary for a specific month
+   */
   public MonthSummary getOrCreateMonth(int month) {
     for (MonthSummary monthSummary : months) {
       if (monthSummary.getMonth() == month) {
@@ -66,7 +81,7 @@ public class YearSummary {
 
     MonthSummary newMonth = new MonthSummary();
     newMonth.setMonth(month);
-    newMonth.setYearSummary(this);
+    newMonth.setYearId(this.id);
     newMonth.setSummaryDuration(0);
     months.add(newMonth);
     return newMonth;

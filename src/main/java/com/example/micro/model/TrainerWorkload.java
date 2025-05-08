@@ -1,17 +1,11 @@
 package com.example.micro.model;
 
-import com.example.micro.model.YearSummary;
 import jakarta.persistence.*;
-import lombok.*;
-
-import java.time.LocalDate;
 import java.util.ArrayList;
-import java.util.HashMap;
 import java.util.List;
-import java.util.Map;
 
 /**
- * TrainerWorkload represents a trainer's monthly workout summary
+ * TrainerWorkload represents a trainer's workout summary
  */
 @Entity
 public class TrainerWorkload {
@@ -23,10 +17,11 @@ public class TrainerWorkload {
     private String lastName;
     private boolean isActive;
 
-    @OneToMany(mappedBy = "trainer", cascade = CascadeType.ALL, orphanRemoval = true)
+    @OneToMany(cascade = CascadeType.ALL, orphanRemoval = true)
+    @JoinColumn(name = "trainer_username")
     private List<YearSummary> years = new ArrayList<>();
 
-
+    // No-args constructor
     public TrainerWorkload() {
     }
 
@@ -36,7 +31,7 @@ public class TrainerWorkload {
         this.firstName = firstName;
         this.lastName = lastName;
         this.isActive = isActive;
-        this.years = years;
+        this.years = years != null ? years : new ArrayList<>();
     }
 
     // Constructor without years list
@@ -48,8 +43,7 @@ public class TrainerWorkload {
         this.years = new ArrayList<>();
     }
 
-
-    // Custom Getter and Setter for 'username'
+    // Getters and setters
     public String getUsername() {
         return username;
     }
@@ -58,7 +52,6 @@ public class TrainerWorkload {
         this.username = username;
     }
 
-    // Custom Getter and Setter for 'firstName'
     public String getFirstName() {
         return firstName;
     }
@@ -67,7 +60,6 @@ public class TrainerWorkload {
         this.firstName = firstName;
     }
 
-    // Custom Getter and Setter for 'lastName'
     public String getLastName() {
         return lastName;
     }
@@ -76,7 +68,6 @@ public class TrainerWorkload {
         this.lastName = lastName;
     }
 
-    // Custom Getter and Setter for 'isActive'
     public boolean isActive() {
         return isActive;
     }
@@ -85,16 +76,17 @@ public class TrainerWorkload {
         this.isActive = isActive;
     }
 
-    // Custom Getter and Setter for 'years'
     public List<YearSummary> getYears() {
         return years;
     }
 
     public void setYears(List<YearSummary> years) {
-        this.years = years;
+        this.years = years != null ? years : new ArrayList<>();
     }
 
-    // Custom method to get or create a YearSummary for a specific year
+    /**
+     * Gets or creates a YearSummary for a specific year
+     */
     public YearSummary getOrCreateYear(int year) {
         for (YearSummary yearSummary : years) {
             if (yearSummary.getYear() == year) {
@@ -104,7 +96,7 @@ public class TrainerWorkload {
 
         YearSummary newYear = new YearSummary();
         newYear.setYear(year);
-        newYear.setTrainer(this);
+        newYear.setTrainerUsername(this.username);
         years.add(newYear);
         return newYear;
     }

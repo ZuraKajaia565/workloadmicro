@@ -1,9 +1,8 @@
 package com.example.micro.service;
 
-
-import com.example.micro.dto.MonthlyWorkloadResponse;
-import com.example.micro.dto.TrainerWorkloadResponse;
-import com.example.micro.dto.WorkloadUpdateRequest;
+import com.example.micro.dto.WorkloadRequest;
+import com.example.micro.exception.InsufficientWorkloadException;
+import com.example.micro.exception.ResourceNotFoundException;
 import com.example.micro.model.MonthSummary;
 import com.example.micro.model.TrainerWorkload;
 import com.example.micro.model.YearSummary;
@@ -11,18 +10,18 @@ import com.example.micro.repository.MonthSummaryRepository;
 import com.example.micro.repository.TrainerWorkloadRepository;
 import com.example.micro.repository.YearSummaryRepository;
 import jakarta.transaction.Transactional;
-import lombok.extern.slf4j.Slf4j;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-import org.slf4j.MDC;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 
+import java.time.LocalDate;
 import java.util.Optional;
-import java.util.stream.Collectors;
 
+/**
+ * Service for handling trainer workload operations
+ */
 @Service
-@Slf4j
 public class WorkloadService {
 
     private static final Logger logger = LoggerFactory.getLogger(WorkloadService.class);
@@ -42,24 +41,44 @@ public class WorkloadService {
     }
 
     /**
-     * Update a trainer's workload based on a training session added or deleted
+     * Check if a trainer exists
+     *
+     * @param username The trainer's username
+     * @return true if the trainer exists, false otherwise
+     */
+    public boolean trainerExists(String username) {
+        return trainerWorkloadRepository.existsById(username);
+    }
+
+    /**
+     * Get a trainer by username
+     *
+     * @param username The trainer's username
+     * @return The trainer workload entity
+     * @throws ResourceNotFoundException if the trainer is not found
+     */
+    public TrainerWorkload getTrainerById(String username) {
+        return trainerWorkloadRepository.findById(username)
+                .orElseThrow(() -> new ResourceNotFoundException("Trainer not found: " + username));
+    }
+
+    /**
+     * Create a new workload entry for a trainer
+     *
+     * @param username The trainer's username
+     * @param request The workload request data
      */
     @Transactional
-    public void updateTrainerWorkload(WorkloadUpdateRequest request) {
-        String transactionId = MDC.get("transactionId");
-        logger.info("Transaction ID: {} - Processing workload update for trainer: {}",
-                transactionId, request.getUsername());
+    public void createTrainerWorkload(String username, WorkloadRequest request) {
+        logger.info("Creating workload for trainer: {}", username);
 
-        // Get year and month from the training date
-        int year = request.getTrainingDate().getYear();
-        int month = request.getTrainingDate().getMonthValue();
-
-        // Get or create trainer workload record
+        // Use the username from the path parameter
         TrainerWorkload trainerWorkload = trainerWorkloadRepository
-                .findById(request.getUsername())
+                .findById(username)
                 .orElseGet(() -> {
+                    logger.info("Trainer not found, creating new trainer record: {}", username);
                     TrainerWorkload newTrainer = new TrainerWorkload();
-                    newTrainer.setUsername(request.getUsername());
+                    newTrainer.setUsername(username);
                     newTrainer.setFirstName(request.getFirstName());
                     newTrainer.setLastName(request.getLastName());
                     newTrainer.setActive(request.isActive());
@@ -71,111 +90,372 @@ public class WorkloadService {
         trainerWorkload.setLastName(request.getLastName());
         trainerWorkload.setActive(request.isActive());
 
+        // Get year and month from the training date
+        LocalDate trainingDate = request.getTrainingDate();
+        int year = trainingDate.getYear();
+        int month = trainingDate.getMonthValue();
+
         // Get or create year summary
-        YearSummary yearSummary = trainerWorkload.getOrCreateYear(year);
+        YearSummary yearSummary = trainerWorkload.getYears().stream()
+                .filter(y -> y.getYear() == year)
+                .findFirst()
+                .orElseGet(() -> {
+                    logger.debug("Creating new year summary for {}: {}", username, year);
+                    YearSummary newYear = new YearSummary();
+                    newYear.setYear(year);
+                    newYear.setTrainerUsername(username);
+                    trainerWorkload.getYears().add(newYear);
+                    return newYear;
+                });
 
         // Get or create month summary
-        MonthSummary monthSummary = yearSummary.getOrCreateMonth(month);
+        MonthSummary monthSummary = yearSummary.getMonths().stream()
+                .filter(m -> m.getMonth() == month)
+                .findFirst()
+                .orElseGet(() -> {
+                    logger.debug("Creating new month summary for {}: {}/{}", username, year, month);
+                    MonthSummary newMonth = new MonthSummary();
+                    newMonth.setMonth(month);
+                    newMonth.setYearId(yearSummary.getId());
+                    newMonth.setSummaryDuration(0);
+                    yearSummary.getMonths().add(newMonth);
+                    return newMonth;
+                });
 
-        // Update summary duration based on action type
-        if (request.getActionType() == WorkloadUpdateRequest.ActionType.ADD) {
-            monthSummary.setSummaryDuration(monthSummary.getSummaryDuration() + request.getTrainingDuration());
-            logger.info("Transaction ID: {} - Added {} minutes to trainer {}'s workload for {}/{}",
-                    transactionId, request.getTrainingDuration(), request.getUsername(), year, month);
-        } else if (request.getActionType() == WorkloadUpdateRequest.ActionType.DELETE) {
-            // Subtract the duration, ensuring we don't go below zero
-            int newDuration = Math.max(0, monthSummary.getSummaryDuration() - request.getTrainingDuration());
-            monthSummary.setSummaryDuration(newDuration);
-            logger.info("Transaction ID: {} - Removed {} minutes from trainer {}'s workload for {}/{}",
-                    transactionId, request.getTrainingDuration(), request.getUsername(), year, month);
+        // Add the duration
+        int currentDuration = monthSummary.getSummaryDuration();
+        int newDuration = currentDuration + request.getTrainingDuration();
+        monthSummary.setSummaryDuration(newDuration);
+
+        // Save everything
+        TrainerWorkload savedTrainer = trainerWorkloadRepository.save(trainerWorkload);
+
+        logger.info("Created workload for trainer: {}, period: {}/{}, new total duration: {} minutes",
+                username, year, month, newDuration);
+    }
+
+    /**
+     * Update an existing workload entry for a trainer
+     *
+     * @param username The trainer's username
+     * @param request The workload request data
+     * @throws ResourceNotFoundException if the trainer doesn't exist
+     */
+    @Transactional
+    public void updateTrainerWorkload(String username, WorkloadRequest request) {
+        logger.info("Updating workload for trainer: {}", username);
+
+        // Check if trainer exists
+        TrainerWorkload trainerWorkload = trainerWorkloadRepository.findById(username)
+                .orElseThrow(() -> {
+                    logger.error("Trainer not found: {}", username);
+                    return new ResourceNotFoundException("Trainer not found: " + username);
+                });
+
+        // Update trainer details
+        trainerWorkload.setFirstName(request.getFirstName());
+        trainerWorkload.setLastName(request.getLastName());
+        trainerWorkload.setActive(request.isActive());
+
+        // Get year and month from the training date
+        LocalDate trainingDate = request.getTrainingDate();
+        int year = trainingDate.getYear();
+        int month = trainingDate.getMonthValue();
+
+        // Find or create the year summary
+        YearSummary yearSummary = trainerWorkload.getYears().stream()
+                .filter(y -> y.getYear() == year)
+                .findFirst()
+                .orElseGet(() -> {
+                    logger.debug("Creating new year summary for {}: {}", username, year);
+                    YearSummary newYear = new YearSummary();
+                    newYear.setYear(year);
+                    newYear.setTrainerUsername(username);
+                    trainerWorkload.getYears().add(newYear);
+                    return newYear;
+                });
+
+        // Find or create the month summary
+        MonthSummary monthSummary = yearSummary.getMonths().stream()
+                .filter(m -> m.getMonth() == month)
+                .findFirst()
+                .orElseGet(() -> {
+                    logger.debug("Creating new month summary for {}: {}/{}", username, year, month);
+                    MonthSummary newMonth = new MonthSummary();
+                    newMonth.setMonth(month);
+                    newMonth.setYearId(yearSummary.getId());
+                    newMonth.setSummaryDuration(0);
+                    yearSummary.getMonths().add(newMonth);
+                    return newMonth;
+                });
+
+        // Set the new duration directly (replacing the old value)
+        monthSummary.setSummaryDuration(request.getTrainingDuration());
+
+        // Save everything
+        trainerWorkloadRepository.save(trainerWorkload);
+
+        logger.info("Updated workload for trainer: {}, period: {}/{}, new duration: {} minutes",
+                username, year, month, request.getTrainingDuration());
+    }
+
+    /**
+     * Delete a workload entry for a trainer
+     *
+     * @param username The trainer's username
+     * @param year The year to delete
+     * @param month The month to delete
+     * @throws ResourceNotFoundException if the trainer or workload entry doesn't exist
+     */
+    @Transactional
+    public void deleteTrainerWorkload(String username, int year, int month) {
+        logger.info("Deleting workload for trainer: {}, period: {}/{}", username, year, month);
+
+        // Check if trainer exists
+        TrainerWorkload trainerWorkload = trainerWorkloadRepository.findById(username)
+                .orElseThrow(() -> {
+                    logger.error("Trainer not found: {}", username);
+                    return new ResourceNotFoundException("Trainer not found: " + username);
+                });
+
+        // Find the year
+        Optional<YearSummary> yearOpt = trainerWorkload.getYears().stream()
+                .filter(y -> y.getYear() == year)
+                .findFirst();
+
+        if (yearOpt.isEmpty()) {
+            logger.error("Year not found for trainer: {}, year: {}", username, year);
+            throw new ResourceNotFoundException("Workload not found for trainer: " + username +
+                    " for year: " + year);
+        }
+
+        YearSummary yearSummary = yearOpt.get();
+
+        // Find the month
+        Optional<MonthSummary> monthOpt = yearSummary.getMonths().stream()
+                .filter(m -> m.getMonth() == month)
+                .findFirst();
+
+        if (monthOpt.isEmpty()) {
+            logger.error("Month not found for trainer: {}, period: {}/{}", username, year, month);
+            throw new ResourceNotFoundException("Workload not found for trainer: " + username +
+                    " for period: " + year + "/" + month);
+        }
+
+        // Remove the month from the year
+        MonthSummary monthSummary = monthOpt.get();
+        yearSummary.getMonths().remove(monthSummary);
+
+        // If the year is now empty, remove it too
+        if (yearSummary.getMonths().isEmpty()) {
+            logger.debug("Removing empty year summary for {}: {}", username, year);
+            trainerWorkload.getYears().remove(yearSummary);
         }
 
         // Save everything
         trainerWorkloadRepository.save(trainerWorkload);
-        logger.info("Transaction ID: {} - Successfully updated workload for trainer: {}",
-                transactionId, request.getUsername());
+
+        logger.info("Deleted workload for trainer: {}, period: {}/{}", username, year, month);
     }
 
     /**
-     * Get a trainer's monthly workload summary
+     * Add to a trainer's workload for a specific month
+     *
+     * @param username The trainer's username
+     * @param year The year
+     * @param month The month
+     * @param duration The duration to add in minutes
+     * @throws ResourceNotFoundException if the trainer doesn't exist
      */
-    public MonthlyWorkloadResponse getMonthlyWorkload(String username, int year, int month) {
-        String transactionId = MDC.get("transactionId");
-        logger.info("Transaction ID: {} - Retrieving monthly workload for trainer: {}, period: {}/{}",
-                transactionId, username, year, month);
+    @Transactional
+    public void addTrainerWorkload(String username, int year, int month, int duration) {
+        logger.info("Adding {} minutes to workload for trainer: {}, period: {}/{}",
+                duration, username, year, month);
 
+        // Check if trainer exists
+        TrainerWorkload trainerWorkload = trainerWorkloadRepository.findById(username)
+                .orElseThrow(() -> {
+                    logger.error("Trainer not found: {}", username);
+                    return new ResourceNotFoundException("Trainer not found: " + username);
+                });
+
+        // Find or create the year summary
+        YearSummary yearSummary = trainerWorkload.getYears().stream()
+                .filter(y -> y.getYear() == year)
+                .findFirst()
+                .orElseGet(() -> {
+                    logger.debug("Creating new year summary for {}: {}", username, year);
+                    YearSummary newYear = new YearSummary();
+                    newYear.setYear(year);
+                    newYear.setTrainerUsername(username);
+                    trainerWorkload.getYears().add(newYear);
+                    return newYear;
+                });
+
+        // Find or create the month summary
+        MonthSummary monthSummary = yearSummary.getMonths().stream()
+                .filter(m -> m.getMonth() == month)
+                .findFirst()
+                .orElseGet(() -> {
+                    logger.debug("Creating new month summary for {}: {}/{}", username, year, month);
+                    MonthSummary newMonth = new MonthSummary();
+                    newMonth.setMonth(month);
+                    newMonth.setYearId(yearSummary.getId());
+                    newMonth.setSummaryDuration(0);
+                    yearSummary.getMonths().add(newMonth);
+                    return newMonth;
+                });
+
+        // Add the duration
+        int currentDuration = monthSummary.getSummaryDuration();
+        int newDuration = currentDuration + duration;
+        monthSummary.setSummaryDuration(newDuration);
+
+        // Save everything
+        trainerWorkloadRepository.save(trainerWorkload);
+
+        logger.info("Added {} minutes to workload for trainer: {}, period: {}/{}, new total: {} minutes",
+                duration, username, year, month, newDuration);
+    }
+
+    /**
+     * Subtract from a trainer's workload for a specific month
+     *
+     * @param username The trainer's username
+     * @param year The year
+     * @param month The month
+     * @param duration The duration to subtract in minutes
+     * @throws ResourceNotFoundException if the trainer or workload entry doesn't exist
+     * @throws InsufficientWorkloadException if the remaining workload would be negative
+     */
+    @Transactional
+    public void subtractTrainerWorkload(String username, int year, int month, int duration) {
+        logger.info("Subtracting {} minutes from workload for trainer: {}, period: {}/{}",
+                duration, username, year, month);
+
+        // Check if trainer exists
+        TrainerWorkload trainerWorkload = trainerWorkloadRepository.findById(username)
+                .orElseThrow(() -> {
+                    logger.error("Trainer not found: {}", username);
+                    return new ResourceNotFoundException("Trainer not found: " + username);
+                });
+
+        // Find the year
+        Optional<YearSummary> yearOpt = trainerWorkload.getYears().stream()
+                .filter(y -> y.getYear() == year)
+                .findFirst();
+
+        if (yearOpt.isEmpty()) {
+            logger.error("Year not found for trainer: {}, year: {}", username, year);
+            throw new ResourceNotFoundException("Workload not found for trainer: " + username +
+                    " for year: " + year);
+        }
+
+        YearSummary yearSummary = yearOpt.get();
+
+        // Find the month
+        Optional<MonthSummary> monthOpt = yearSummary.getMonths().stream()
+                .filter(m -> m.getMonth() == month)
+                .findFirst();
+
+        if (monthOpt.isEmpty()) {
+            logger.error("Month not found for trainer: {}, period: {}/{}", username, year, month);
+            throw new ResourceNotFoundException("Workload not found for trainer: " + username +
+                    " for period: " + year + "/" + month);
+        }
+
+        // Check if there's enough duration to subtract
+        MonthSummary monthSummary = monthOpt.get();
+        int currentDuration = monthSummary.getSummaryDuration();
+
+        if (currentDuration < duration) {
+            String errorMessage = String.format(
+                    "Cannot subtract %d minutes from current workload of %d minutes for trainer: %s for period: %d/%d",
+                    duration, currentDuration, username, year, month);
+            logger.error(errorMessage);
+            throw new InsufficientWorkloadException(errorMessage);
+        }
+
+        // Subtract the duration
+        int newDuration = currentDuration - duration;
+        monthSummary.setSummaryDuration(newDuration);
+
+        // If duration becomes zero, consider removing the month
+        if (newDuration == 0) {
+            logger.debug("Workload is now zero, removing month summary for {}: {}/{}",
+                    username, year, month);
+            yearSummary.getMonths().remove(monthSummary);
+
+            // If year is now empty, remove it too
+            if (yearSummary.getMonths().isEmpty()) {
+                logger.debug("Year is now empty, removing year summary for {}: {}",
+                        username, year);
+                trainerWorkload.getYears().remove(yearSummary);
+            }
+        }
+
+        // Save everything
+        trainerWorkloadRepository.save(trainerWorkload);
+
+        logger.info("Subtracted {} minutes from workload for trainer: {}, period: {}/{}, new total: {} minutes",
+                duration, username, year, month, newDuration);
+    }
+
+    /**
+     * Get a trainer's monthly workload
+     *
+     * @param username The trainer's username
+     * @param year The year
+     * @param month The month
+     * @return The month summary entity
+     * @throws ResourceNotFoundException if the workload data is not found
+     */
+    public MonthSummary getMonthlyWorkload(String username, int year, int month) {
+        logger.info("Retrieving monthly workload for trainer: {}, period: {}/{}",
+                username, year, month);
+
+        // Use the repository method to find the month summary
         Optional<MonthSummary> monthSummaryOpt = monthSummaryRepository
                 .findByTrainerUsernameAndYearAndMonth(username, year, month);
 
         if (monthSummaryOpt.isEmpty()) {
-            logger.info("Transaction ID: {} - No workload found for trainer: {}, period: {}/{}",
-                    transactionId, username, year, month);
-            return new MonthlyWorkloadResponse(username, "", "", false, year, month, 0);
+            logger.error("Monthly workload not found for trainer: {}, period: {}/{}",
+                    username, year, month);
+            throw new ResourceNotFoundException("Workload not found for trainer: " + username +
+                    " for period: " + year + "/" + month);
         }
 
         MonthSummary monthSummary = monthSummaryOpt.get();
-        TrainerWorkload trainer = monthSummary.getYearSummary().getTrainer();
+        logger.info("Retrieved monthly workload for trainer: {}, period: {}/{}, duration: {} minutes",
+                username, year, month, monthSummary.getSummaryDuration());
 
-        logger.info("Transaction ID: {} - Successfully retrieved workload for trainer: {}, period: {}/{}, duration: {} minutes",
-                transactionId, username, year, month, monthSummary.getSummaryDuration());
-
-        return new MonthlyWorkloadResponse(
-                trainer.getUsername(),
-                trainer.getFirstName(),
-                trainer.getLastName(),
-                trainer.isActive(),
-                year,
-                month,
-                monthSummary.getSummaryDuration()
-        );
+        return monthSummary;
     }
 
     /**
      * Get the complete workload summary for a trainer
+     *
+     * @param username The trainer's username
+     * @return The trainer workload entity with all workload data
+     * @throws ResourceNotFoundException if the trainer is not found
      */
-    public TrainerWorkloadResponse getTrainerWorkloadSummary(String username) {
-        String transactionId = MDC.get("transactionId");
-        logger.info("Transaction ID: {} - Retrieving complete workload summary for trainer: {}",
-                transactionId, username);
+    public TrainerWorkload getTrainerWorkloadSummary(String username) {
+        logger.info("Retrieving complete workload summary for trainer: {}", username);
 
-        Optional<TrainerWorkload> trainerOpt = trainerWorkloadRepository.findById(username);
+        TrainerWorkload trainerWorkload = trainerWorkloadRepository.findById(username)
+                .orElseThrow(() -> {
+                    logger.error("Trainer not found: {}", username);
+                    return new ResourceNotFoundException("Trainer not found: " + username);
+                });
 
-        if (trainerOpt.isEmpty()) {
-            logger.info("Transaction ID: {} - No workload data found for trainer: {}",
-                    transactionId, username);
-            return new TrainerWorkloadResponse(username, "", "", false);
-        }
+        int totalYears = trainerWorkload.getYears().size();
+        int totalMonths = trainerWorkload.getYears().stream()
+                .mapToInt(y -> y.getMonths().size())
+                .sum();
 
-        TrainerWorkload trainer = trainerOpt.get();
+        logger.info("Retrieved workload summary for trainer: {}, years: {}, months: {}",
+                username, totalYears, totalMonths);
 
-        // Convert the entity to DTO
-        TrainerWorkloadResponse response = new TrainerWorkloadResponse();
-        response.setUsername(trainer.getUsername());
-        response.setFirstName(trainer.getFirstName());
-        response.setLastName(trainer.getLastName());
-        response.setActive(trainer.isActive());
-
-        // Map years and months
-        response.setYears(trainer.getYears().stream()
-                .map(year -> {
-                    TrainerWorkloadResponse.YearSummaryDto yearDto =
-                            new TrainerWorkloadResponse.YearSummaryDto();
-                    yearDto.setYear(year.getYear());
-
-                    // Map months
-                    yearDto.setMonths(year.getMonths().stream()
-                            .map(month -> new TrainerWorkloadResponse.MonthSummaryDto(
-                                    month.getMonth(),
-                                    month.getSummaryDuration()))
-                            .collect(Collectors.toList()));
-
-                    return yearDto;
-                })
-                .collect(Collectors.toList()));
-
-        logger.info("Transaction ID: {} - Successfully retrieved complete workload summary for trainer: {}",
-                transactionId, username);
-
-        return response;
+        return trainerWorkload;
     }
 }

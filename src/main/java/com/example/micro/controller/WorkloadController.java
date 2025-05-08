@@ -1,23 +1,27 @@
 package com.example.micro.controller;
 
-
 import com.example.micro.dto.MonthlyWorkloadResponse;
 import com.example.micro.dto.TrainerWorkloadResponse;
-import com.example.micro.dto.WorkloadUpdateRequest;
+import com.example.micro.dto.WorkloadRequest;
+import com.example.micro.exception.ResourceNotFoundException;
+import com.example.micro.model.MonthSummary;
+import com.example.micro.model.TrainerWorkload;
+import com.example.micro.model.YearSummary;
 import com.example.micro.service.WorkloadService;
 import jakarta.validation.Valid;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-import org.slf4j.MDC;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.*;
 
-import java.util.UUID;
+import java.util.List;
+import java.util.stream.Collectors;
 
 @RestController
-@RequestMapping("/api/workload")
+@RequestMapping("/api/workloads")
 public class WorkloadController {
 
     private static final Logger logger = LoggerFactory.getLogger(WorkloadController.class);
@@ -30,100 +34,142 @@ public class WorkloadController {
     }
 
     /**
-     * Endpoint to update a trainer's workload
+     * Create a workload entry for a trainer
      */
-    @PostMapping
+    @PostMapping("/trainers/{username}")
     @PreAuthorize("isAuthenticated()")
-    public ResponseEntity<String> updateTrainerWorkload(
-            @Valid @RequestBody WorkloadUpdateRequest request,
-            @RequestHeader(value = "X-Transaction-ID", required = false) String transactionId) {
+    public ResponseEntity<Void> createTrainerWorkload(
+            @PathVariable String username,
+            @Valid @RequestBody WorkloadRequest request) {
 
-        // If no transaction ID is provided, generate one
-        if (transactionId == null || transactionId.isEmpty()) {
-            transactionId = UUID.randomUUID().toString();
-        }
+        logger.info("Received workload creation request for trainer: {}", username);
 
-        // Set the transaction ID in the MDC
-        MDC.put("transactionId", transactionId);
+        workloadService.createTrainerWorkload(username, request);
 
-        try {
-            logger.info("Transaction ID: {} - Received workload update request for trainer: {}",
-                    transactionId, request.getUsername());
-
-            workloadService.updateTrainerWorkload(request);
-
-            logger.info("Transaction ID: {} - Successfully processed workload update for trainer: {}",
-                    transactionId, request.getUsername());
-
-            return ResponseEntity.ok("Workload updated successfully");
-        } finally {
-            MDC.clear();
-        }
+        logger.info("Successfully created workload for trainer: {}", username);
+        return ResponseEntity.status(HttpStatus.CREATED).build();
     }
 
     /**
-     * Endpoint to get a trainer's monthly workload
+     * Update a workload entry for a trainer
      */
-    @GetMapping("/monthly")
+    @PutMapping("/trainers/{username}")
+    @PreAuthorize("isAuthenticated()")
+    public ResponseEntity<Void> updateTrainerWorkload(
+            @PathVariable String username,
+            @Valid @RequestBody WorkloadRequest request) {
+
+        logger.info("Received workload update request for trainer: {}", username);
+
+        workloadService.updateTrainerWorkload(username, request);
+
+        logger.info("Successfully updated workload for trainer: {}", username);
+        return ResponseEntity.ok().build();
+    }
+
+    /**
+     * Delete a workload entry for a trainer
+     */
+    @DeleteMapping("/trainers/{username}/year/{year}/month/{month}")
+    @PreAuthorize("isAuthenticated()")
+    public ResponseEntity<Void> deleteTrainerWorkload(
+            @PathVariable String username,
+            @PathVariable int year,
+            @PathVariable int month) {
+
+        logger.info("Received workload deletion request for trainer: {} for period: {}/{}",
+                username, year, month);
+
+        workloadService.deleteTrainerWorkload(username, year, month);
+
+        logger.info("Successfully deleted workload for trainer: {} for period: {}/{}",
+                username, year, month);
+        return ResponseEntity.noContent().build();
+    }
+
+    /**
+     * Get a trainer's monthly workload
+     */
+    @GetMapping("/trainers/{username}/year/{year}/month/{month}")
     @PreAuthorize("isAuthenticated()")
     public ResponseEntity<MonthlyWorkloadResponse> getMonthlyWorkload(
-            @RequestParam String username,
-            @RequestParam int year,
-            @RequestParam int month,
-            @RequestHeader(value = "X-Transaction-ID", required = false) String transactionId) {
+            @PathVariable String username,
+            @PathVariable int year,
+            @PathVariable int month) {
 
-        // If no transaction ID is provided, generate one
-        if (transactionId == null || transactionId.isEmpty()) {
-            transactionId = UUID.randomUUID().toString();
-        }
+        logger.info("Retrieving monthly workload for trainer: {}, period: {}/{}",
+                username, year, month);
 
-        // Set the transaction ID in the MDC
-        MDC.put("transactionId", transactionId);
+        MonthSummary monthSummary = workloadService.getMonthlyWorkload(username, year, month);
+        MonthlyWorkloadResponse response = convertToMonthlyResponse(monthSummary);
 
-        try {
-            logger.info("Transaction ID: {} - Received monthly workload request for trainer: {}, period: {}/{}",
-                    transactionId, username, year, month);
-
-            MonthlyWorkloadResponse response = workloadService.getMonthlyWorkload(username, year, month);
-
-            logger.info("Transaction ID: {} - Successfully retrieved monthly workload for trainer: {}",
-                    transactionId, username);
-
-            return ResponseEntity.ok(response);
-        } finally {
-            MDC.clear();
-        }
+        logger.info("Successfully retrieved monthly workload for trainer: {}", username);
+        return ResponseEntity.ok(response);
     }
 
     /**
-     * Endpoint to get a trainer's complete workload summary
+     * Get a trainer's complete workload summary
      */
-    @GetMapping("/{username}")
+    @GetMapping("/trainers/{username}")
     @PreAuthorize("isAuthenticated()")
     public ResponseEntity<TrainerWorkloadResponse> getTrainerWorkloadSummary(
-            @PathVariable String username,
-            @RequestHeader(value = "X-Transaction-ID", required = false) String transactionId) {
+            @PathVariable String username) {
 
-        // If no transaction ID is provided, generate one
-        if (transactionId == null || transactionId.isEmpty()) {
-            transactionId = UUID.randomUUID().toString();
-        }
+        logger.info("Retrieving complete workload summary for trainer: {}", username);
 
-        // Set the transaction ID in the MDC
-        MDC.put("transactionId", transactionId);
+        TrainerWorkload trainerWorkload = workloadService.getTrainerWorkloadSummary(username);
+        TrainerWorkloadResponse response = convertToSummaryResponse(trainerWorkload);
 
-        try {
-            logger.info("Transaction ID: {} - Received complete workload summary request for trainer: {}",
-                    transactionId, username);
+        logger.info("Successfully retrieved workload summary for trainer: {}", username);
+        return ResponseEntity.ok(response);
+    }
 
-            TrainerWorkloadResponse response = workloadService.getTrainerWorkloadSummary(username);
+    /**
+     * Converts a MonthSummary entity to a MonthlyWorkloadResponse DTO
+     */
+    private MonthlyWorkloadResponse convertToMonthlyResponse(MonthSummary monthSummary) {
+        YearSummary yearSummary = monthSummary.getYearSummary();
+        TrainerWorkload trainer = workloadService.getTrainerById(yearSummary.getTrainerUsername());
 
-            logger.info("Transaction ID: {} - Successfully retrieved workload summary for trainer: {}",
-                    transactionId, username);
+        return new MonthlyWorkloadResponse(
+                trainer.getUsername(),
+                trainer.getFirstName(),
+                trainer.getLastName(),
+                trainer.isActive(),
+                yearSummary.getYear(),
+                monthSummary.getMonth(),
+                monthSummary.getSummaryDuration()
+        );
+    }
 
-            return ResponseEntity.ok(response);
-        } finally {
-            MDC.clear();
-        }
+    /**
+     * Converts a TrainerWorkload entity to a TrainerWorkloadResponse DTO
+     */
+    private TrainerWorkloadResponse convertToSummaryResponse(TrainerWorkload trainerWorkload) {
+        TrainerWorkloadResponse response = new TrainerWorkloadResponse();
+        response.setUsername(trainerWorkload.getUsername());
+        response.setFirstName(trainerWorkload.getFirstName());
+        response.setLastName(trainerWorkload.getLastName());
+        response.setActive(trainerWorkload.isActive());
+
+        // Convert years
+        response.setYears(trainerWorkload.getYears().stream()
+                .map(this::convertYearSummary)
+                .collect(Collectors.toList()));
+
+        return response;
+    }
+
+    private TrainerWorkloadResponse.YearSummaryDto convertYearSummary(YearSummary yearSummary) {
+        TrainerWorkloadResponse.YearSummaryDto yearDto = new TrainerWorkloadResponse.YearSummaryDto(yearSummary.getYear());
+
+        // Convert months
+        yearDto.setMonths(yearSummary.getMonths().stream()
+                .map(month -> new TrainerWorkloadResponse.MonthSummaryDto(
+                        month.getMonth(),
+                        month.getSummaryDuration()))
+                .collect(Collectors.toList()));
+
+        return yearDto;
     }
 }
