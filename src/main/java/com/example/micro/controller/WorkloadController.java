@@ -34,6 +34,16 @@ public class WorkloadController {
         this.workloadService = workloadService;
     }
 
+    @GetMapping
+    @PreAuthorize("isAuthenticated()")
+    public ResponseEntity<List<TrainerWorkloadResponse>> getAllWorkloads(
+            @RequestHeader(value = "X-Transaction-ID", required = false) String transactionId) {
+
+        logger.info("Retrieving all workloads");
+        List<TrainerWorkloadResponse> workloads = workloadService.getAllTrainerWorkloads();
+        return ResponseEntity.ok(workloads);
+    }
+
     /**
      * Create or update workload for a specific month
      */
@@ -166,8 +176,7 @@ public class WorkloadController {
     /**
      * Get complete workload summary
      */
-    @GetMapping
-    @PreAuthorize("isAuthenticated()")
+
     public ResponseEntity<TrainerWorkloadResponse> getWorkloadSummary(
             @PathVariable String username) {
 

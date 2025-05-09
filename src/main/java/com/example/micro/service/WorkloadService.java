@@ -1,5 +1,6 @@
 package com.example.micro.service;
 
+import com.example.micro.dto.TrainerWorkloadResponse;
 import com.example.micro.exception.InsufficientWorkloadException;
 import com.example.micro.exception.ResourceNotFoundException;
 import com.example.micro.model.MonthSummary;
@@ -15,7 +16,9 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 
 import java.util.ArrayList;
+import java.util.List;
 import java.util.Optional;
+import java.util.stream.Collectors;
 
 /**
  * Service for handling trainer workload operations
@@ -294,6 +297,75 @@ public class WorkloadService {
 
         // Save and return
         return trainerWorkloadRepository.save(trainer);
+    }
+
+    public List<TrainerWorkloadResponse> getAllTrainerWorkloads() {
+        logger.info("Getting all trainer workloads");
+
+        // Get all trainers from repository
+        List<TrainerWorkload> trainers = trainerWorkloadRepository.findAll();
+        logger.info("Found {} trainers in database", trainers.size());
+
+        if (trainers.isEmpty()) {
+            logger.warn("No trainers found in database");
+            return new ArrayList<>();
+        }
+
+        // Log details about each trainer
+        for (TrainerWorkload trainer : trainers) {
+            logger.info("Trainer: {}, First Name: {}, Last Name: {}, Active: {}, Years: {}",
+                    trainer.getUsername(),
+                    trainer.getFirstName(),
+                    trainer.getLastName(),
+                    trainer.isActive(),
+                    trainer.getYears().size());
+        }
+
+        // Convert to response objects
+        List<TrainerWorkloadResponse> responses = trainers.stream()
+                .map(this::convertToTrainerWorkloadResponse)
+                .collect(Collectors.toList());
+
+        logger.info("Returning {} trainer workload responses", responses.size());
+        return responses;
+    }
+
+    private TrainerWorkloadResponse convertToTrainerWorkloadResponse(TrainerWorkload trainer) {
+        TrainerWorkloadResponse response = new TrainerWorkloadResponse();
+
+        response.setUsername(trainer.getUsername());
+        response.setFirstName(trainer.getFirstName());
+        response.setLastName(trainer.getLastName());
+        response.setActive(trainer.isActive());
+
+        // Convert years
+        List<TrainerWorkloadResponse.YearSummaryDto> yearDtos = trainer.getYears().stream()
+                .map(this::convertYearSummaryToDto)
+                .collect(Collectors.toList());
+
+        response.setYears(yearDtos);
+
+        return response;
+    }
+
+    private TrainerWorkloadResponse.YearSummaryDto convertYearSummaryToDto(YearSummary year) {
+        TrainerWorkloadResponse.YearSummaryDto yearDto = new TrainerWorkloadResponse.YearSummaryDto(year.getYear());
+
+        // Convert months
+        List<TrainerWorkloadResponse.MonthSummaryDto> monthDtos = year.getMonths().stream()
+                .map(month -> convertMonthSummaryToDto(month))
+                .collect(Collectors.toList());
+
+        yearDto.setMonths(monthDtos);
+
+        return yearDto;
+    }
+
+    private TrainerWorkloadResponse.MonthSummaryDto convertMonthSummaryToDto(MonthSummary month) {
+        return new TrainerWorkloadResponse.MonthSummaryDto(
+                month.getMonth(),
+                month.getSummaryDuration()
+        );
     }
 
     /**

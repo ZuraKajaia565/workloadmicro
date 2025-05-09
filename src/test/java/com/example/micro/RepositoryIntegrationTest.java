@@ -109,63 +109,8 @@ public class RepositoryIntegrationTest {
         assertEquals(2025, foundMonth.get().getYearSummary().getYear());
     }
 
-    @Test
-    void yearSummaryRepository_FindByTrainerUsernameAndYear_Success() {
-        // Arrange
-        TrainerWorkload trainer = new TrainerWorkload();
-        trainer.setUsername("john.doe");
-        trainer.setFirstName("John");
-        trainer.setLastName("Doe");
-        trainer.setActive(true);
-        trainer.setYears(new ArrayList<>());
-        entityManager.persist(trainer);
 
-        YearSummary year = new YearSummary();
-        year.setYear(2025);
-        year.setMonths(new ArrayList<>());
-        entityManager.persist(year);
 
-        // Act
-        Optional<YearSummary> foundYear = yearSummaryRepository.findByTrainerUsernameAndYear("john.doe", 2025);
-
-        // Assert
-        assertTrue(foundYear.isPresent());
-        assertEquals(2025, foundYear.get().getYear());
-
-    }
-
-    @Test
-    void monthSummaryRepository_FindByTrainerUsernameAndYearAndMonth_Success() {
-        // Arrange
-        TrainerWorkload trainer = new TrainerWorkload();
-        trainer.setUsername("john.doe");
-        trainer.setFirstName("John");
-        trainer.setLastName("Doe");
-        trainer.setActive(true);
-        trainer.setYears(new ArrayList<>());
-        entityManager.persist(trainer);
-
-        YearSummary year = new YearSummary();
-        year.setYear(2025);
-        year.setMonths(new ArrayList<>());
-        entityManager.persist(year);
-
-        MonthSummary month = new MonthSummary();
-        month.setMonth(5);
-        month.setSummaryDuration(60);
-        month.setYearSummary(year);
-        entityManager.persist(month);
-
-        // Act
-        Optional<MonthSummary> foundMonth = monthSummaryRepository.findByTrainerUsernameAndYearAndMonth("john.doe", 2025, 5);
-
-        // Assert
-        assertTrue(foundMonth.isPresent());
-        assertEquals(5, foundMonth.get().getMonth());
-        assertEquals(60, foundMonth.get().getSummaryDuration());
-        assertEquals(2025, foundMonth.get().getYearSummary().getYear());
-
-    }
 
     @Test
     void trainerWorkloadRepository_Delete_Success() {

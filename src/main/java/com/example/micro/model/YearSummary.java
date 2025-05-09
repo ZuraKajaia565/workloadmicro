@@ -69,4 +69,3 @@ public class YearSummary {
     this.months = months != null ? months : new ArrayList<>();
   }
 }
-}
