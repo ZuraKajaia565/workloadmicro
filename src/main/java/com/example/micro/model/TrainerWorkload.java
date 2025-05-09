@@ -83,21 +83,4 @@ public class TrainerWorkload {
     public void setYears(List<YearSummary> years) {
         this.years = years != null ? years : new ArrayList<>();
     }
-
-    /**
-     * Gets or creates a YearSummary for a specific year
-     */
-    public YearSummary getOrCreateYear(int year) {
-        for (YearSummary yearSummary : years) {
-            if (yearSummary.getYear() == year) {
-                return yearSummary;
-            }
-        }
-
-        YearSummary newYear = new YearSummary();
-        newYear.setYear(year);
-        newYear.setTrainerUsername(this.username);
-        years.add(newYear);
-        return newYear;
-    }
 }

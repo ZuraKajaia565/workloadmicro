@@ -1,43 +1,39 @@
 package com.example.micro.dto;
 
-import java.time.LocalDate;
+import jakarta.validation.constraints.NotBlank;
+import jakarta.validation.constraints.NotNull;
+import jakarta.validation.constraints.Positive;
 
 /**
- * Represents a request to create or update a trainer's workload.
+ * Request object for creating or updating trainer workload
  */
 public class WorkloadRequest {
 
-    private String username;
+    @NotBlank(message = "First name is required")
     private String firstName;
+
+    @NotBlank(message = "Last name is required")
     private String lastName;
-    private boolean active;
-    private LocalDate trainingDate;
+
+    private boolean isActive;
+
+    @Positive(message = "Training duration must be positive")
     private int trainingDuration;
 
+    // No-argument constructor
     public WorkloadRequest() {
-        // Default constructor
     }
 
-    public WorkloadRequest(String username, String firstName, String lastName, boolean active,
-                           LocalDate trainingDate, int trainingDuration) {
-        this.username = username;
+    // All-args constructor
+    public WorkloadRequest(String firstName, String lastName, boolean isActive,
+                           int trainingDuration) {
         this.firstName = firstName;
         this.lastName = lastName;
-        this.active = active;
-        this.trainingDate = trainingDate;
+        this.isActive = isActive;
         this.trainingDuration = trainingDuration;
     }
 
     // Getters and setters
-
-    public String getUsername() {
-        return username;
-    }
-
-    public void setUsername(String username) {
-        this.username = username;
-    }
-
     public String getFirstName() {
         return firstName;
     }
@@ -55,19 +51,11 @@ public class WorkloadRequest {
     }
 
     public boolean isActive() {
-        return active;
+        return isActive;
     }
 
     public void setActive(boolean active) {
-        this.active = active;
-    }
-
-    public LocalDate getTrainingDate() {
-        return trainingDate;
-    }
-
-    public void setTrainingDate(LocalDate trainingDate) {
-        this.trainingDate = trainingDate;
+        isActive = active;
     }
 
     public int getTrainingDuration() {
@@ -76,15 +64,5 @@ public class WorkloadRequest {
 
     public void setTrainingDuration(int trainingDuration) {
         this.trainingDuration = trainingDuration;
-    }
-
-    // Optional: validation methods
-
-    public boolean isValid() {
-        return username != null && !username.trim().isEmpty()
-                && firstName != null && !firstName.trim().isEmpty()
-                && lastName != null && !lastName.trim().isEmpty()
-                && trainingDate != null
-                && trainingDuration > 0;
     }
 }

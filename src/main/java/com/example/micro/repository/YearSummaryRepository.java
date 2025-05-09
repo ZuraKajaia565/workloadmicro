@@ -8,6 +8,9 @@ import org.springframework.stereotype.Repository;
 
 import java.util.Optional;
 
+/**
+ * Repository for year summary data
+ */
 @Repository
 public interface YearSummaryRepository extends JpaRepository<YearSummary, Long> {
 

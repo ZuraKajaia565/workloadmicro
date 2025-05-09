@@ -1,5 +1,8 @@
 package com.example.micro.exception;
 
+/**
+ * Standard error response format for REST API
+ */
 public class ErrorResponse {
 
     private int status;

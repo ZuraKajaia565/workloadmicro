@@ -21,7 +21,8 @@ public class MonthSummary {
   @Column(name = "year_id")
   private Long yearId;
 
-  @ManyToOne
+  // ManyToOne relationship with YearSummary (but not direct property to avoid circular reference)
+  @ManyToOne(fetch = FetchType.LAZY)
   @JoinColumn(name = "year_id", insertable = false, updatable = false)
   private YearSummary yearSummary;
 
@@ -74,10 +75,8 @@ public class MonthSummary {
     return yearSummary;
   }
 
+  // This is needed for proper DTO conversion but not for JPA
   public void setYearSummary(YearSummary yearSummary) {
     this.yearSummary = yearSummary;
-    if (yearSummary != null) {
-      this.yearId = yearSummary.getId();
-    }
   }
 }

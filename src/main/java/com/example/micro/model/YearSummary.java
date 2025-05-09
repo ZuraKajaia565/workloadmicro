@@ -68,22 +68,5 @@ public class YearSummary {
   public void setMonths(List<MonthSummary> months) {
     this.months = months != null ? months : new ArrayList<>();
   }
-
-  /**
-   * Gets or creates a MonthSummary for a specific month
-   */
-  public MonthSummary getOrCreateMonth(int month) {
-    for (MonthSummary monthSummary : months) {
-      if (monthSummary.getMonth() == month) {
-        return monthSummary;
-      }
-    }
-
-    MonthSummary newMonth = new MonthSummary();
-    newMonth.setMonth(month);
-    newMonth.setYearId(this.id);
-    newMonth.setSummaryDuration(0);
-    months.add(newMonth);
-    return newMonth;
-  }
+}
 }

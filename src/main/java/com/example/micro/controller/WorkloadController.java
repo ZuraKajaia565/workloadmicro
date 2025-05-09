@@ -3,6 +3,7 @@ package com.example.micro.controller;
 import com.example.micro.dto.MonthlyWorkloadResponse;
 import com.example.micro.dto.TrainerWorkloadResponse;
 import com.example.micro.dto.WorkloadRequest;
+import com.example.micro.exception.InsufficientWorkloadException;
 import com.example.micro.exception.ResourceNotFoundException;
 import com.example.micro.model.MonthSummary;
 import com.example.micro.model.TrainerWorkload;
@@ -21,7 +22,7 @@ import java.util.List;
 import java.util.stream.Collectors;
 
 @RestController
-@RequestMapping("/api/workloads")
+@RequestMapping("/api/trainers/{username}/workloads")
 public class WorkloadController {
 
     private static final Logger logger = LoggerFactory.getLogger(WorkloadController.class);
@@ -34,63 +35,35 @@ public class WorkloadController {
     }
 
     /**
-     * Create a workload entry for a trainer
+     * Create or update workload for a specific month
      */
-    @PostMapping("/trainers/{username}")
+    @PutMapping("/{year}/{month}")
     @PreAuthorize("isAuthenticated()")
-    public ResponseEntity<Void> createTrainerWorkload(
-            @PathVariable String username,
-            @Valid @RequestBody WorkloadRequest request) {
-
-        logger.info("Received workload creation request for trainer: {}", username);
-
-        workloadService.createTrainerWorkload(username, request);
-
-        logger.info("Successfully created workload for trainer: {}", username);
-        return ResponseEntity.status(HttpStatus.CREATED).build();
-    }
-
-    /**
-     * Update a workload entry for a trainer
-     */
-    @PutMapping("/trainers/{username}")
-    @PreAuthorize("isAuthenticated()")
-    public ResponseEntity<Void> updateTrainerWorkload(
-            @PathVariable String username,
-            @Valid @RequestBody WorkloadRequest request) {
-
-        logger.info("Received workload update request for trainer: {}", username);
-
-        workloadService.updateTrainerWorkload(username, request);
-
-        logger.info("Successfully updated workload for trainer: {}", username);
-        return ResponseEntity.ok().build();
-    }
-
-    /**
-     * Delete a workload entry for a trainer
-     */
-    @DeleteMapping("/trainers/{username}/year/{year}/month/{month}")
-    @PreAuthorize("isAuthenticated()")
-    public ResponseEntity<Void> deleteTrainerWorkload(
+    public ResponseEntity<Void> updateWorkload(
             @PathVariable String username,
             @PathVariable int year,
-            @PathVariable int month) {
+            @PathVariable int month,
+            @Valid @RequestBody WorkloadRequest request) {
 
-        logger.info("Received workload deletion request for trainer: {} for period: {}/{}",
-                username, year, month);
+        logger.info("Updating workload for trainer: {}, period: {}/{}", username, year, month);
 
-        workloadService.deleteTrainerWorkload(username, year, month);
+        try {
+            workloadService.updateOrCreateWorkload(username, year, month, request.getFirstName(),
+                    request.getLastName(), request.isActive(), request.getTrainingDuration());
 
-        logger.info("Successfully deleted workload for trainer: {} for period: {}/{}",
-                username, year, month);
-        return ResponseEntity.noContent().build();
+            logger.info("Successfully updated workload for trainer: {}, period: {}/{}",
+                    username, year, month);
+            return ResponseEntity.ok().build();
+        } catch (Exception e) {
+            logger.error("Error updating workload: {}", e.getMessage(), e);
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).build();
+        }
     }
 
     /**
-     * Get a trainer's monthly workload
+     * Get workload for a specific month
      */
-    @GetMapping("/trainers/{username}/year/{year}/month/{month}")
+    @GetMapping("/{year}/{month}")
     @PreAuthorize("isAuthenticated()")
     public ResponseEntity<MonthlyWorkloadResponse> getMonthlyWorkload(
             @PathVariable String username,
@@ -100,28 +73,116 @@ public class WorkloadController {
         logger.info("Retrieving monthly workload for trainer: {}, period: {}/{}",
                 username, year, month);
 
-        MonthSummary monthSummary = workloadService.getMonthlyWorkload(username, year, month);
-        MonthlyWorkloadResponse response = convertToMonthlyResponse(monthSummary);
+        try {
+            MonthSummary monthSummary = workloadService.getMonthlyWorkload(username, year, month);
+            MonthlyWorkloadResponse response = convertToMonthlyResponse(monthSummary);
 
-        logger.info("Successfully retrieved monthly workload for trainer: {}", username);
-        return ResponseEntity.ok(response);
+            logger.info("Successfully retrieved monthly workload for trainer: {}", username);
+            return ResponseEntity.ok(response);
+        } catch (ResourceNotFoundException e) {
+            logger.warn("Workload not found: {}", e.getMessage());
+            return ResponseEntity.notFound().build();
+        }
     }
 
     /**
-     * Get a trainer's complete workload summary
+     * Delete workload for a specific month
      */
-    @GetMapping("/trainers/{username}")
+    @DeleteMapping("/{year}/{month}")
     @PreAuthorize("isAuthenticated()")
-    public ResponseEntity<TrainerWorkloadResponse> getTrainerWorkloadSummary(
+    public ResponseEntity<Void> deleteWorkload(
+            @PathVariable String username,
+            @PathVariable int year,
+            @PathVariable int month) {
+
+        logger.info("Deleting workload for trainer: {}, period: {}/{}",
+                username, year, month);
+
+        try {
+            workloadService.deleteWorkload(username, year, month);
+
+            logger.info("Successfully deleted workload for trainer: {}, period: {}/{}",
+                    username, year, month);
+            return ResponseEntity.noContent().build();
+        } catch (ResourceNotFoundException e) {
+            logger.warn("Workload not found: {}", e.getMessage());
+            return ResponseEntity.notFound().build();
+        }
+    }
+
+    /**
+     * Add training duration to a trainer's workload
+     */
+    @PostMapping("/{year}/{month}/add")
+    @PreAuthorize("isAuthenticated()")
+    public ResponseEntity<Void> addWorkload(
+            @PathVariable String username,
+            @PathVariable int year,
+            @PathVariable int month,
+            @RequestParam int duration) {
+
+        logger.info("Adding {} minutes to workload for trainer: {}, period: {}/{}",
+                duration, username, year, month);
+
+        try {
+            workloadService.addWorkload(username, year, month, duration);
+
+            logger.info("Successfully added duration to workload for trainer: {}", username);
+            return ResponseEntity.ok().build();
+        } catch (ResourceNotFoundException e) {
+            logger.warn("Workload not found: {}", e.getMessage());
+            return ResponseEntity.notFound().build();
+        }
+    }
+
+    /**
+     * Subtract training duration from a trainer's workload
+     */
+    @PostMapping("/{year}/{month}/subtract")
+    @PreAuthorize("isAuthenticated()")
+    public ResponseEntity<Void> subtractWorkload(
+            @PathVariable String username,
+            @PathVariable int year,
+            @PathVariable int month,
+            @RequestParam int duration) {
+
+        logger.info("Subtracting {} minutes from workload for trainer: {}, period: {}/{}",
+                duration, username, year, month);
+
+        try {
+            workloadService.subtractWorkload(username, year, month, duration);
+
+            logger.info("Successfully subtracted duration from workload for trainer: {}", username);
+            return ResponseEntity.ok().build();
+        } catch (ResourceNotFoundException e) {
+            logger.warn("Workload not found: {}", e.getMessage());
+            return ResponseEntity.notFound().build();
+        } catch (InsufficientWorkloadException e) {
+            logger.warn("Insufficient workload: {}", e.getMessage());
+            return ResponseEntity.status(HttpStatus.BAD_REQUEST).build();
+        }
+    }
+
+    /**
+     * Get complete workload summary
+     */
+    @GetMapping
+    @PreAuthorize("isAuthenticated()")
+    public ResponseEntity<TrainerWorkloadResponse> getWorkloadSummary(
             @PathVariable String username) {
 
         logger.info("Retrieving complete workload summary for trainer: {}", username);
 
-        TrainerWorkload trainerWorkload = workloadService.getTrainerWorkloadSummary(username);
-        TrainerWorkloadResponse response = convertToSummaryResponse(trainerWorkload);
+        try {
+            TrainerWorkload trainerWorkload = workloadService.getTrainerWorkloadSummary(username);
+            TrainerWorkloadResponse response = convertToSummaryResponse(trainerWorkload);
 
-        logger.info("Successfully retrieved workload summary for trainer: {}", username);
-        return ResponseEntity.ok(response);
+            logger.info("Successfully retrieved workload summary for trainer: {}", username);
+            return ResponseEntity.ok(response);
+        } catch (ResourceNotFoundException e) {
+            logger.warn("Trainer not found: {}", e.getMessage());
+            return ResponseEntity.notFound().build();
+        }
     }
 
     /**

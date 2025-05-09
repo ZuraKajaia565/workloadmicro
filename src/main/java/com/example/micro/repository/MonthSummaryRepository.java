@@ -8,6 +8,9 @@ import org.springframework.stereotype.Repository;
 
 import java.util.Optional;
 
+/**
+ * Repository for month summary data
+ */
 @Repository
 public interface MonthSummaryRepository extends JpaRepository<MonthSummary, Long> {
 

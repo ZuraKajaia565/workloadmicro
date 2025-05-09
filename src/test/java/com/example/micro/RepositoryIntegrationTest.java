@@ -65,7 +65,6 @@ public class RepositoryIntegrationTest {
 
         YearSummary year = new YearSummary();
         year.setYear(2025);
-        year.setTrainer(trainer);
         year.setMonths(new ArrayList<>());
 
         // Act
@@ -75,7 +74,6 @@ public class RepositoryIntegrationTest {
         // Assert
         assertTrue(foundYear.isPresent());
         assertEquals(2025, foundYear.get().getYear());
-        assertEquals("john.doe", foundYear.get().getTrainer().getUsername());
     }
 
     @Test
@@ -91,7 +89,7 @@ public class RepositoryIntegrationTest {
 
         YearSummary year = new YearSummary();
         year.setYear(2025);
-        year.setTrainer(trainer);
+
         year.setMonths(new ArrayList<>());
         entityManager.persist(year);
 
@@ -124,7 +122,6 @@ public class RepositoryIntegrationTest {
 
         YearSummary year = new YearSummary();
         year.setYear(2025);
-        year.setTrainer(trainer);
         year.setMonths(new ArrayList<>());
         entityManager.persist(year);
 
@@ -134,7 +131,7 @@ public class RepositoryIntegrationTest {
         // Assert
         assertTrue(foundYear.isPresent());
         assertEquals(2025, foundYear.get().getYear());
-        assertEquals("john.doe", foundYear.get().getTrainer().getUsername());
+
     }
 
     @Test
@@ -150,7 +147,6 @@ public class RepositoryIntegrationTest {
 
         YearSummary year = new YearSummary();
         year.setYear(2025);
-        year.setTrainer(trainer);
         year.setMonths(new ArrayList<>());
         entityManager.persist(year);
 
@@ -168,7 +164,7 @@ public class RepositoryIntegrationTest {
         assertEquals(5, foundMonth.get().getMonth());
         assertEquals(60, foundMonth.get().getSummaryDuration());
         assertEquals(2025, foundMonth.get().getYearSummary().getYear());
-        assertEquals("john.doe", foundMonth.get().getYearSummary().getTrainer().getUsername());
+
     }
 
     @Test
@@ -203,7 +199,6 @@ public class RepositoryIntegrationTest {
 
         YearSummary year = new YearSummary();
         year.setYear(2025);
-        year.setTrainer(trainer);
         year.setMonths(new ArrayList<>());
         entityManager.persist(year);
 

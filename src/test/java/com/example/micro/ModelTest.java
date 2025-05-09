@@ -11,14 +11,16 @@ import java.util.List;
 import static org.junit.jupiter.api.Assertions.*;
 
 public class ModelTest {
-/*
+
     @Test
     void trainerWorkload_GetOrCreateYear_ExistingYear_ReturnsThatYear() {
         // Arrange
         TrainerWorkload trainer = new TrainerWorkload();
+        trainer.setUsername("john.doe");
+
         YearSummary existingYear = new YearSummary();
         existingYear.setYear(2025);
-        existingYear.setTrainer(trainer);
+        existingYear.setTrainerUsername(trainer.getUsername());
 
         List<YearSummary> years = new ArrayList<>();
         years.add(existingYear);
@@ -36,6 +38,7 @@ public class ModelTest {
     void trainerWorkload_GetOrCreateYear_NewYear_CreatesAndReturnsIt() {
         // Arrange
         TrainerWorkload trainer = new TrainerWorkload();
+        trainer.setUsername("john.doe");
         trainer.setYears(new ArrayList<>());
 
         // Act
@@ -44,7 +47,7 @@ public class ModelTest {
         // Assert
         assertNotNull(result, "Should create and return a new year");
         assertEquals(2025, result.getYear(), "New year should have the correct year value");
-        assertSame(trainer, result.getTrainer(), "New year should reference back to the trainer");
+        assertEquals(trainer.getUsername(), result.getTrainerUsername(), "New year should reference back to the trainer username");
         assertEquals(1, trainer.getYears().size(), "Should add the new year to the trainer's years list");
         assertSame(result, trainer.getYears().get(0), "New year should be in the trainer's years list");
     }
@@ -53,9 +56,11 @@ public class ModelTest {
     void yearSummary_GetOrCreateMonth_ExistingMonth_ReturnsThatMonth() {
         // Arrange
         YearSummary year = new YearSummary();
+        year.setId(1L);
+
         MonthSummary existingMonth = new MonthSummary();
         existingMonth.setMonth(5);
-        existingMonth.setYearSummary(year);
+        existingMonth.setYearId(year.getId());
 
         List<MonthSummary> months = new ArrayList<>();
         months.add(existingMonth);
@@ -73,6 +78,7 @@ public class ModelTest {
     void yearSummary_GetOrCreateMonth_NewMonth_CreatesAndReturnsIt() {
         // Arrange
         YearSummary year = new YearSummary();
+        year.setId(1L);
         year.setMonths(new ArrayList<>());
 
         // Act
@@ -82,7 +88,7 @@ public class ModelTest {
         assertNotNull(result, "Should create and return a new month");
         assertEquals(5, result.getMonth(), "New month should have the correct month value");
         assertEquals(0, result.getSummaryDuration(), "New month should have zero duration initially");
-        assertSame(year, result.getYearSummary(), "New month should reference back to the year");
+        assertEquals(year.getId(), result.getYearId(), "New month should reference back to the year ID");
         assertEquals(1, year.getMonths().size(), "Should add the new month to the year's months list");
         assertSame(result, year.getMonths().get(0), "New month should be in the year's months list");
     }
@@ -117,9 +123,7 @@ public class ModelTest {
         // Act
         year.setId(1L);
         year.setYear(2025);
-
-        TrainerWorkload trainer = new TrainerWorkload();
-        year.setTrainer(trainer);
+        year.setTrainerUsername("john.doe");
 
         List<MonthSummary> months = new ArrayList<>();
         year.setMonths(months);
@@ -127,7 +131,7 @@ public class ModelTest {
         // Assert
         assertEquals(1L, year.getId());
         assertEquals(2025, year.getYear());
-        assertSame(trainer, year.getTrainer());
+        assertEquals("john.doe", year.getTrainerUsername());
         assertSame(months, year.getMonths());
     }
 
@@ -140,15 +144,13 @@ public class ModelTest {
         month.setId(1L);
         month.setMonth(5);
         month.setSummaryDuration(60);
-
-        YearSummary year = new YearSummary();
-        month.setYearSummary(year);
+        month.setYearId(1L);
 
         // Assert
         assertEquals(1L, month.getId());
         assertEquals(5, month.getMonth());
         assertEquals(60, month.getSummaryDuration());
-        assertSame(year, month.getYearSummary());
+        assertEquals(1L, month.getYearId());
     }
 
     @Test
@@ -176,16 +178,16 @@ public class ModelTest {
         // Arrange
         Long id = 1L;
         int year = 2025;
-        TrainerWorkload trainer = new TrainerWorkload();
+        String trainerUsername = "john.doe";
         List<MonthSummary> months = new ArrayList<>();
 
         // Act
-        YearSummary yearSummary = new YearSummary(id, year, trainer, months);
+        YearSummary yearSummary = new YearSummary(id, year, trainerUsername, months);
 
         // Assert
         assertEquals(id, yearSummary.getId());
         assertEquals(year, yearSummary.getYear());
-        assertSame(trainer, yearSummary.getTrainer());
+        assertEquals(trainerUsername, yearSummary.getTrainerUsername());
         assertSame(months, yearSummary.getMonths());
     }
 
@@ -195,16 +197,15 @@ public class ModelTest {
         Long id = 1L;
         int month = 5;
         int summaryDuration = 60;
-        YearSummary year = new YearSummary();
+        Long yearId = 1L;
 
         // Act
-        MonthSummary monthSummary = new MonthSummary(id, month, summaryDuration, year);
+        MonthSummary monthSummary = new MonthSummary(id, month, summaryDuration, yearId);
 
         // Assert
         assertEquals(id, monthSummary.getId());
         assertEquals(month, monthSummary.getMonth());
         assertEquals(summaryDuration, monthSummary.getSummaryDuration());
-        assertSame(year, monthSummary.getYearSummary());
+        assertEquals(yearId, monthSummary.getYearId());
     }
-*/
 }
