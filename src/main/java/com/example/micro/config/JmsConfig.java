@@ -55,9 +55,10 @@ public class JmsConfig {
     }
 
     @Bean
-    public Queue workloadDlq() {
+    public ActiveMQQueue workloadDlq() {
         return new ActiveMQQueue(WORKLOAD_DLQ);
     }
+
 
     @Bean
     public JmsListenerContainerFactory<?> jmsListenerContainerFactory(
