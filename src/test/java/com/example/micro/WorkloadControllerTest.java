@@ -2,6 +2,7 @@ package com.example.micro;
 
 import com.example.micro.controller.WorkloadController;
 import com.example.micro.document.TrainerWorkloadDocument;
+import com.example.micro.exception.ResourceNotFoundException;
 import com.example.micro.service.WorkloadService;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -14,7 +15,6 @@ import org.springframework.http.ResponseEntity;
 
 import java.util.ArrayList;
 import java.util.List;
-import java.util.Optional;
 
 import static org.junit.jupiter.api.Assertions.*;
 import static org.mockito.Mockito.*;
@@ -23,7 +23,7 @@ import static org.mockito.Mockito.*;
 public class WorkloadControllerTest {
 
     @Mock
-    private WorkloadService workloadMongoService;
+    private WorkloadService workloadService;
 
     @InjectMocks
     private WorkloadController controller;
@@ -40,8 +40,13 @@ public class WorkloadControllerTest {
         trainerDocument.setActive(true);
 
         // Add year and month
-        TrainerWorkloadDocument.YearSummary yearSummary = new TrainerWorkloadDocument.YearSummary(2025);
-        TrainerWorkloadDocument.MonthSummary monthSummary = new TrainerWorkloadDocument.MonthSummary(5, 60);
+        TrainerWorkloadDocument.YearSummary yearSummary = new TrainerWorkloadDocument.YearSummary();
+        yearSummary.setYear(2025);
+
+        TrainerWorkloadDocument.MonthSummary monthSummary = new TrainerWorkloadDocument.MonthSummary();
+        monthSummary.setMonth(5);
+        monthSummary.setTrainingsSummaryDuration(60);
+
         yearSummary.getMonths().add(monthSummary);
         trainerDocument.getYears().add(yearSummary);
     }
@@ -49,7 +54,7 @@ public class WorkloadControllerTest {
     @Test
     void getTrainerWorkload_Found_Success() {
         // Arrange
-        when(workloadMongoService.getTrainerWorkload("trainer1")).thenReturn(Optional.of(trainerDocument));
+        when(workloadService.getTrainerWorkload("trainer1")).thenReturn(trainerDocument);
 
         // Act
         ResponseEntity<?> response = controller.getTrainerWorkload("trainer1");
@@ -64,15 +69,15 @@ public class WorkloadControllerTest {
         assertEquals("Doe", result.getLastName());
         assertEquals(1, result.getYears().size());
         assertEquals(1, result.getYears().get(0).getMonths().size());
-        assertEquals(60, result.getYears().get(0).getMonths().get(0).getSummaryDuration());
+        assertEquals(60, result.getYears().get(0).getMonths().get(0).getTrainingsSummaryDuration());
 
-        verify(workloadMongoService).getTrainerWorkload("trainer1");
+        verify(workloadService).getTrainerWorkload("trainer1");
     }
 
     @Test
     void getTrainerWorkload_NotFound() {
         // Arrange
-        when(workloadMongoService.getTrainerWorkload("nonexistent")).thenReturn(Optional.empty());
+        when(workloadService.getTrainerWorkload("nonexistent")).thenThrow(new ResourceNotFoundException("Trainer not found: nonexistent"));
 
         // Act
         ResponseEntity<?> response = controller.getTrainerWorkload("nonexistent");
@@ -82,7 +87,7 @@ public class WorkloadControllerTest {
         assertEquals(HttpStatus.NOT_FOUND, response.getStatusCode());
         assertNull(response.getBody());
 
-        verify(workloadMongoService).getTrainerWorkload("nonexistent");
+        verify(workloadService).getTrainerWorkload("nonexistent");
     }
 
     @Test
@@ -91,7 +96,7 @@ public class WorkloadControllerTest {
         List<TrainerWorkloadDocument> trainers = new ArrayList<>();
         trainers.add(trainerDocument);
 
-        when(workloadMongoService.findTrainersByName("John", "Doe")).thenReturn(trainers);
+        when(workloadService.findTrainersByFullName("John", "Doe")).thenReturn(trainers);
 
         // Act
         ResponseEntity<?> response = controller.searchTrainersByName("John", "Doe");
@@ -107,22 +112,45 @@ public class WorkloadControllerTest {
         assertEquals(1, result.size());
         assertEquals("trainer1", result.get(0).getUsername());
 
-        verify(workloadMongoService).findTrainersByName("John", "Doe");
+        verify(workloadService).findTrainersByFullName("John", "Doe");
     }
 
     @Test
     void searchTrainersByName_NotFound() {
         // Arrange
-        when(workloadMongoService.findTrainersByName("Unknown", "Person")).thenReturn(new ArrayList<>());
+        when(workloadService.findTrainersByFullName("Unknown", "Person")).thenReturn(new ArrayList<>());
 
         // Act
         ResponseEntity<?> response = controller.searchTrainersByName("Unknown", "Person");
 
         // Assert
         assertNotNull(response);
-        assertEquals(HttpStatus.NOT_FOUND, response.getStatusCode());
-        assertNull(response.getBody());
+        assertEquals(HttpStatus.OK, response.getStatusCode());
+        assertTrue(response.getBody() instanceof List);
 
-        verify(workloadMongoService).findTrainersByName("Unknown", "Person");
+        @SuppressWarnings("unchecked")
+        List<TrainerWorkloadDocument> result = (List<TrainerWorkloadDocument>) response.getBody();
+
+        assertTrue(result.isEmpty());
+
+        verify(workloadService).findTrainersByFullName("Unknown", "Person");
+    }
+
+    @Test
+    void searchTrainersByName_ExceptionHandling() {
+        // Arrange
+        when(workloadService.findTrainersByFullName("John", "Doe"))
+                .thenThrow(new RuntimeException("Database connection error"));
+
+        // Act
+        ResponseEntity<?> response = controller.searchTrainersByName("John", "Doe");
+
+        // Assert
+        assertNotNull(response);
+        assertEquals(HttpStatus.INTERNAL_SERVER_ERROR, response.getStatusCode());
+        assertTrue(response.getBody() instanceof String);
+        assertTrue(response.getBody().toString().contains("Error:"));
+
+        verify(workloadService).findTrainersByFullName("John", "Doe");
     }
 }

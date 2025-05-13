@@ -22,7 +22,10 @@ import org.springframework.jms.support.converter.MessageConverter;
 import org.springframework.jms.support.converter.MessageType;
 import org.springframework.jms.support.destination.DynamicDestinationResolver;
 
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
+
 import jakarta.jms.Queue;
 
 @Configuration
@@ -84,13 +87,7 @@ public class JmsConfig {
         return factory;
     }
 
-    @Bean
-    public MessageConverter jacksonJmsMessageConverter() {
-        MappingJackson2MessageConverter converter = new MappingJackson2MessageConverter();
-        converter.setTargetType(MessageType.TEXT);
-        converter.setTypeIdPropertyName("_type");
-        return converter;
-    }
+
 
     @Bean
     public ActiveMQConnectionFactory connectionFactory() {
@@ -105,6 +102,7 @@ public class JmsConfig {
         factory.setTrustAllPackages(false);
         factory.setTrustedPackages(List.of(
                 "com.example.micro.messaging",
+                "com.zura.gymCRM.messaging",
                 "java.util",
                 "java.lang"
         ));
@@ -224,5 +222,21 @@ public class JmsConfig {
 
             return factory;
         }
+    }
+
+    @Bean
+    public MessageConverter jacksonJmsMessageConverter() {
+        MappingJackson2MessageConverter converter = new MappingJackson2MessageConverter();
+        converter.setTargetType(MessageType.TEXT);
+
+        // Add type mappings to handle messages from GymCRM
+        Map<String, Class<?>> typeIdMappings = new HashMap<>();
+        typeIdMappings.put("com.zura.gymCRM.messaging.WorkloadMessage",
+                com.example.micro.messaging.WorkloadMessage.class);
+
+        converter.setTypeIdMappings(typeIdMappings);
+        converter.setTypeIdPropertyName("_type");
+
+        return converter;
     }
 }

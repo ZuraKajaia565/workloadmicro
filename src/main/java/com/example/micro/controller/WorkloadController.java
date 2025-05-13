@@ -10,7 +10,6 @@ import com.example.micro.model.MonthSummary;
 import com.example.micro.model.TrainerWorkload;
 import com.example.micro.model.YearSummary;
 import com.example.micro.service.WorkloadService;
-import com.example.micro.service.WorkloadService;
 import jakarta.validation.Valid;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -29,47 +28,44 @@ public class WorkloadController {
 
     private static final Logger logger = LoggerFactory.getLogger(WorkloadController.class);
 
-
-    private final WorkloadService workloadMongoService;
+    private final WorkloadService workloadService;
 
     @Autowired
-    public WorkloadController(WorkloadService workloadMongoService) {
-        this.workloadMongoService = workloadMongoService;
+    public WorkloadController(WorkloadService workloadService) {
+        this.workloadService = workloadService;
     }
 
-    // Your existing controller methods
-
-    @GetMapping("/mongo")
+    @GetMapping
     @PreAuthorize("isAuthenticated()")
-    public ResponseEntity<?> getMongoWorkload(@PathVariable String username) {
-        logger.info("Retrieving MongoDB workload for trainer: {}", username);
+    public ResponseEntity<?> getTrainerWorkload(@PathVariable String username) {
+        logger.info("Retrieving workload for trainer: {}", username);
 
         try {
-            TrainerWorkloadDocument trainerWorkload = workloadMongoService.getTrainerWorkload(username);
+            TrainerWorkloadDocument trainerWorkload = workloadService.getTrainerWorkload(username);
             return ResponseEntity.ok(trainerWorkload);
         } catch (ResourceNotFoundException e) {
-            logger.warn("MongoDB trainer not found: {}", e.getMessage());
+            logger.warn("Trainer not found: {}", e.getMessage());
             return ResponseEntity.notFound().build();
         } catch (Exception e) {
-            logger.error("Error retrieving MongoDB workload: {}", e.getMessage(), e);
+            logger.error("Error retrieving workload: {}", e.getMessage(), e);
             return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
                     .body("Error: " + e.getMessage());
         }
     }
 
-    @GetMapping("/mongo/search")
+    @GetMapping("/search")
     @PreAuthorize("isAuthenticated()")
-    public ResponseEntity<?> searchMongoTrainers(
+    public ResponseEntity<?> searchTrainersByName(
             @RequestParam String firstName,
             @RequestParam String lastName) {
 
-        logger.info("Searching MongoDB trainers by name: {} {}", firstName, lastName);
+        logger.info("Searching trainers by name: {} {}", firstName, lastName);
 
         try {
-            List<TrainerWorkloadDocument> trainers = workloadMongoService.findTrainersByFullName(firstName, lastName);
+            List<TrainerWorkloadDocument> trainers = workloadService.findTrainersByFullName(firstName, lastName);
             return ResponseEntity.ok(trainers);
         } catch (Exception e) {
-            logger.error("Error searching MongoDB trainers: {}", e.getMessage(), e);
+            logger.error("Error searching trainers: {}", e.getMessage(), e);
             return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
                     .body("Error: " + e.getMessage());
         }
