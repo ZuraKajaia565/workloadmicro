@@ -1,384 +1,350 @@
 package com.example.micro.service;
 
-import com.example.micro.dto.TrainerWorkloadResponse;
-import com.example.micro.exception.InsufficientWorkloadException;
+import com.example.micro.document.TrainerWorkloadDocument;
 import com.example.micro.exception.ResourceNotFoundException;
-import com.example.micro.model.MonthSummary;
-import com.example.micro.model.TrainerWorkload;
-import com.example.micro.model.YearSummary;
-import com.example.micro.repository.MonthSummaryRepository;
+import com.example.micro.messaging.WorkloadMessage;
 import com.example.micro.repository.TrainerWorkloadRepository;
-import com.example.micro.repository.YearSummaryRepository;
-import jakarta.transaction.Transactional;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.slf4j.MDC;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.data.mongodb.core.MongoTemplate;
+import org.springframework.data.mongodb.core.query.Criteria;
+import org.springframework.data.mongodb.core.query.Query;
+import org.springframework.data.mongodb.core.query.Update;
 import org.springframework.stereotype.Service;
 
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Optional;
-import java.util.stream.Collectors;
 
-/**
- * Service for handling trainer workload operations
- */
 @Service
 public class WorkloadService {
 
     private static final Logger logger = LoggerFactory.getLogger(WorkloadService.class);
 
-    private final TrainerWorkloadRepository trainerWorkloadRepository;
-    private final YearSummaryRepository yearSummaryRepository;
-    private final MonthSummaryRepository monthSummaryRepository;
+    private final TrainerWorkloadRepository workloadRepository;
+    private final MongoTemplate mongoTemplate;
 
     @Autowired
-    public WorkloadService(
-            TrainerWorkloadRepository trainerWorkloadRepository,
-            YearSummaryRepository yearSummaryRepository,
-            MonthSummaryRepository monthSummaryRepository) {
-        this.trainerWorkloadRepository = trainerWorkloadRepository;
-        this.yearSummaryRepository = yearSummaryRepository;
-        this.monthSummaryRepository = monthSummaryRepository;
+    public WorkloadService(TrainerWorkloadRepository workloadRepository, MongoTemplate mongoTemplate) {
+        this.workloadRepository = workloadRepository;
+        this.mongoTemplate = mongoTemplate;
     }
 
     /**
-     * Get a trainer by username
-     *
-     * @param username The trainer's username
-     * @return The trainer workload entity
-     * @throws ResourceNotFoundException if the trainer is not found
+     * Process workload message
+     * @param message The workload message with trainer and training info
      */
-    public TrainerWorkload getTrainerById(String username) {
-        return trainerWorkloadRepository.findById(username)
+    public void processWorkloadMessage(WorkloadMessage message) {
+        String transactionId = message.getTransactionId();
+        MDC.put("transactionId", transactionId);
+
+        logger.info("Processing MongoDB workload for trainer: {}, period: {}/{}, transaction ID: {}",
+                message.getUsername(), message.getYear(), message.getMonth(), transactionId);
+
+        try {
+            switch (message.getMessageType()) {
+                case CREATE_UPDATE:
+                    updateWorkloadAtomic(message);
+                    break;
+                case DELETE:
+                    deleteWorkload(message.getUsername(), message.getYear(), message.getMonth());
+                    break;
+                default:
+                    logger.warn("Unknown message type: {}", message.getMessageType());
+                    break;
+            }
+
+            logger.info("MongoDB workload operation completed for trainer: {}, transaction ID: {}",
+                    message.getUsername(), transactionId);
+        } catch (Exception e) {
+            logger.error("Error processing MongoDB workload: {}, transaction ID: {}",
+                    e.getMessage(), transactionId, e);
+            throw e;
+        } finally {
+            MDC.clear();
+        }
+    }
+
+    /**
+     * Update workload using MongoDB's atomic operations
+     * This is more efficient for large documents as it avoids fetching the entire document
+     */
+    public void updateWorkloadAtomic(WorkloadMessage message) {
+        String transactionId = message.getTransactionId();
+        MDC.put("transactionId", transactionId);
+
+        logger.info("MongoDB: Processing atomic workload update for trainer: {}, period: {}/{}",
+                message.getUsername(), message.getYear(), message.getMonth());
+
+        try {
+            // Check if trainer exists
+            boolean trainerExists = workloadRepository.existsById(message.getUsername());
+
+            if (!trainerExists) {
+                // Create new trainer document
+                logger.info("MongoDB: Trainer not found, creating new record for: {}", message.getUsername());
+                createNewTrainerWorkload(message);
+                return;
+            }
+
+            // Create query to find the specific month within the specific year
+            Query query = new Query(Criteria.where("username").is(message.getUsername())
+                    .and("years.year").is(message.getYear())
+                    .and("years.months.month").is(message.getMonth()));
+
+            // Check if the specific month exists
+            boolean monthExists = mongoTemplate.exists(query, TrainerWorkloadDocument.class);
+
+            if (monthExists) {
+                // Update existing month duration
+                logger.debug("MongoDB: Found existing month record for trainer: {}, updating duration", message.getUsername());
+
+                // Create update operation for the specific month
+                Update update = new Update()
+                        .set("firstName", message.getFirstName())
+                        .set("lastName", message.getLastName())
+                        .set("isActive", message.isActive());
+
+                // Depending on message type, either set or increment duration
+                if (message.getMessageType() == WorkloadMessage.MessageType.CREATE_UPDATE) {
+                    update.set("years.$[year].months.$[month].trainingsSummaryDuration", message.getTrainingDuration());
+                } else {
+                    update.inc("years.$[year].months.$[month].trainingsSummaryDuration", message.getTrainingDuration());
+                }
+
+                // Add array filters to target the specific year and month
+                query = new Query(Criteria.where("username").is(message.getUsername()));
+                mongoTemplate.updateFirst(
+                        query,
+                        update,
+                        "trainer_workloads"
+                );
+
+                logger.debug("MongoDB: Updated workload duration atomically for trainer: {}, period: {}/{}",
+                        message.getUsername(), message.getYear(), message.getMonth());
+            } else {
+                // Month doesn't exist, so we need more complex handling
+                // First check if year exists
+                query = new Query(Criteria.where("username").is(message.getUsername())
+                        .and("years.year").is(message.getYear()));
+
+                boolean yearExists = mongoTemplate.exists(query, TrainerWorkloadDocument.class);
+
+                if (yearExists) {
+                    // Year exists, but month doesn't - add new month to existing year
+                    logger.debug("MongoDB: Year exists but month doesn't for trainer: {}, adding new month", message.getUsername());
+
+                    TrainerWorkloadDocument.MonthSummary newMonth = new TrainerWorkloadDocument.MonthSummary();
+                    newMonth.setMonth(message.getMonth());
+                    newMonth.setTrainingsSummaryDuration(message.getTrainingDuration());
+
+                    Update update = new Update().push("years.$[year].months", newMonth);
+
+                    mongoTemplate.updateFirst(
+                            new Query(Criteria.where("username").is(message.getUsername())),
+                            update,
+                            "trainer_workloads"
+                    );
+                } else {
+                    // Neither year nor month exists - add new year with new month
+                    logger.debug("MongoDB: Neither year nor month exists for trainer: {}, adding both", message.getUsername());
+
+                    TrainerWorkloadDocument.MonthSummary newMonth = new TrainerWorkloadDocument.MonthSummary();
+                    newMonth.setMonth(message.getMonth());
+                    newMonth.setTrainingsSummaryDuration(message.getTrainingDuration());
+
+                    TrainerWorkloadDocument.YearSummary newYear = new TrainerWorkloadDocument.YearSummary();
+                    newYear.setYear(message.getYear());
+                    newYear.getMonths().add(newMonth);
+
+                    Update update = new Update()
+                            .set("firstName", message.getFirstName())
+                            .set("lastName", message.getLastName())
+                            .set("isActive", message.isActive())
+                            .push("years", newYear);
+
+                    mongoTemplate.updateFirst(
+                            new Query(Criteria.where("username").is(message.getUsername())),
+                            update,
+                            "trainer_workloads"
+                    );
+                }
+
+                logger.debug("MongoDB: Added new workload record for trainer: {}, period: {}/{}",
+                        message.getUsername(), message.getYear(), message.getMonth());
+            }
+        } catch (Exception e) {
+            logger.error("MongoDB: Error processing atomic workload update: {}", e.getMessage(), e);
+            throw e;
+        }
+    }
+
+    /**
+     * Create new trainer workload document
+     */
+    private void createNewTrainerWorkload(WorkloadMessage message) {
+        TrainerWorkloadDocument trainer = new TrainerWorkloadDocument();
+        trainer.setUsername(message.getUsername());
+        trainer.setFirstName(message.getFirstName());
+        trainer.setLastName(message.getLastName());
+        trainer.setActive(message.isActive());
+
+        // Create year summary
+        TrainerWorkloadDocument.YearSummary yearSummary = new TrainerWorkloadDocument.YearSummary();
+        yearSummary.setYear(message.getYear());
+
+        // Create month summary
+        TrainerWorkloadDocument.MonthSummary monthSummary = new TrainerWorkloadDocument.MonthSummary();
+        monthSummary.setMonth(message.getMonth());
+        monthSummary.setTrainingsSummaryDuration(message.getTrainingDuration());
+
+        // Add month to year
+        yearSummary.getMonths().add(monthSummary);
+
+        // Add year to trainer
+        trainer.getYears().add(yearSummary);
+
+        // Save to MongoDB
+        workloadRepository.save(trainer);
+        logger.debug("MongoDB: Created new trainer workload document: {}", trainer.getUsername());
+    }
+
+    /**
+     * Delete a specific month's workload
+     */
+    public void deleteWorkload(String username, int year, int month) {
+        String transactionId = MDC.get("transactionId");
+        if (transactionId == null) {
+            transactionId = "no-transaction-id";
+        }
+
+        logger.info("MongoDB: Deleting workload for trainer: {}, period: {}/{}",
+                username, year, month);
+
+        // Check if trainer exists
+        boolean trainerExists = workloadRepository.existsById(username);
+        if (!trainerExists) {
+            logger.warn("MongoDB: Trainer not found for deletion: {}", username);
+            throw new ResourceNotFoundException("Trainer not found: " + username);
+        }
+
+        // Create query to find the specific month
+        Query query = new Query(Criteria.where("username").is(username)
+                .and("years.year").is(year)
+                .and("years.months.month").is(month));
+
+        // Check if the specific month exists
+        boolean monthExists = mongoTemplate.exists(query, TrainerWorkloadDocument.class);
+        if (!monthExists) {
+            logger.warn("MongoDB: Month not found for deletion: {}/{} for trainer: {}",
+                    year, month, username);
+            throw new ResourceNotFoundException(
+                    "Workload not found for trainer: " + username +
+                            " for period: " + year + "/" + month);
+        }
+
+        // Find the document to remove the month
+        TrainerWorkloadDocument trainer = workloadRepository.findById(username)
+                .orElseThrow(() -> new ResourceNotFoundException("Trainer not found: " + username));
+
+        // Find the year
+        TrainerWorkloadDocument.YearSummary yearSummary = null;
+        for (TrainerWorkloadDocument.YearSummary ys : trainer.getYears()) {
+            if (ys.getYear() == year) {
+                yearSummary = ys;
+                break;
+            }
+        }
+
+        if (yearSummary == null) {
+            logger.warn("MongoDB: Year not found for deletion: {} for trainer: {}",
+                    year, username);
+            throw new ResourceNotFoundException(
+                    "Year not found for trainer: " + username + " for year: " + year);
+        }
+
+        // Find and remove the month
+        yearSummary.getMonths().removeIf(m -> m.getMonth() == month);
+
+        // If year is now empty, remove it
+        if (yearSummary.getMonths().isEmpty()) {
+            trainer.getYears().remove(yearSummary);
+        }
+
+        // Save the updated document
+        workloadRepository.save(trainer);
+        logger.debug("MongoDB: Deleted workload for trainer: {}, period: {}/{}",
+                username, year, month);
+    }
+
+    /**
+     * Get trainer workload document by username
+     */
+    public TrainerWorkloadDocument getTrainerWorkload(String username) {
+        String transactionId = MDC.get("transactionId");
+        if (transactionId == null) {
+            transactionId = "no-transaction-id";
+        }
+
+        logger.info("MongoDB: Getting workload for trainer: {}", username);
+
+        return workloadRepository.findById(username)
                 .orElseThrow(() -> new ResourceNotFoundException("Trainer not found: " + username));
     }
 
     /**
-     * Update or create a workload entry for a trainer
+     * Find trainers by first name and last name
+     */
+    public List<TrainerWorkloadDocument> findTrainersByFullName(String firstName, String lastName) {
+        String transactionId = MDC.get("transactionId");
+        if (transactionId == null) {
+            transactionId = "no-transaction-id";
+        }
+
+        logger.info("MongoDB: Finding trainers by name: {} {}", firstName, lastName);
+
+        return workloadRepository.findByFirstNameAndLastName(firstName, lastName);
+    }
+
+
+    /**
+     * Updates or creates a workload record
      *
      * @param username The trainer's username
      * @param year The year
      * @param month The month
      * @param firstName The trainer's first name
      * @param lastName The trainer's last name
-     * @param isActive The trainer's active status
-     * @param duration The workload duration
-     * @return The updated trainer workload
+     * @param active Whether the trainer is active
+     * @param trainingDuration The training duration
      */
-    @Transactional
-    public TrainerWorkload updateOrCreateWorkload(String username, int year, int month,
-                                                  String firstName, String lastName,
-                                                  boolean isActive, int duration) {
+    public void updateOrCreateWorkload(
+            String username,
+            int year,
+            int month,
+            String firstName,
+            String lastName,
+            boolean active,
+            int trainingDuration) {
 
-        logger.debug("Updating or creating workload for trainer: {}, period: {}/{}",
+        logger.info("Updating or creating workload for trainer: {}, period: {}/{}",
                 username, year, month);
 
-        // Find or create trainer
-        TrainerWorkload trainer = trainerWorkloadRepository.findById(username)
-                .orElseGet(() -> {
-                    TrainerWorkload newTrainer = new TrainerWorkload();
-                    newTrainer.setUsername(username);
-                    newTrainer.setYears(new ArrayList<>());
-                    return newTrainer;
-                });
+        // Create a WorkloadMessage to reuse existing logic
+        WorkloadMessage message = new WorkloadMessage();
+        message.setUsername(username);
+        message.setYear(year);
+        message.setMonth(month);
+        message.setFirstName(firstName);
+        message.setLastName(lastName);
+        message.setActive(active);
+        message.setTrainingDuration(trainingDuration);
+        message.setMessageType(WorkloadMessage.MessageType.CREATE_UPDATE);
+        message.setTransactionId(MDC.get("transactionId"));
 
-        // Update trainer details
-        trainer.setFirstName(firstName);
-        trainer.setLastName(lastName);
-        trainer.setActive(isActive);
-
-        // Find or create year
-        YearSummary yearSummary = trainer.getYears().stream()
-                .filter(y -> y.getYear() == year)
-                .findFirst()
-                .orElseGet(() -> {
-                    YearSummary newYear = new YearSummary();
-                    newYear.setYear(year);
-                    newYear.setTrainerUsername(username);
-                    newYear.setMonths(new ArrayList<>());
-                    trainer.getYears().add(newYear);
-                    return newYear;
-                });
-
-        // Find or create month
-        MonthSummary monthSummary = yearSummary.getMonths().stream()
-                .filter(m -> m.getMonth() == month)
-                .findFirst()
-                .orElseGet(() -> {
-                    MonthSummary newMonth = new MonthSummary();
-                    newMonth.setMonth(month);
-                    newMonth.setYearId(yearSummary.getId());
-                    newMonth.setSummaryDuration(0);
-                    yearSummary.getMonths().add(newMonth);
-                    return newMonth;
-                });
-
-        // Set the duration
-        monthSummary.setSummaryDuration(duration);
-
-        // Save and return
-        return trainerWorkloadRepository.save(trainer);
-    }
-
-    /**
-     * Get a trainer's monthly workload
-     *
-     * @param username The trainer's username
-     * @param year The year
-     * @param month The month
-     * @return The month summary entity
-     * @throws ResourceNotFoundException if the workload data is not found
-     */
-    public MonthSummary getMonthlyWorkload(String username, int year, int month) {
-        logger.debug("Getting monthly workload for trainer: {}, period: {}/{}",
-                username, year, month);
-
-        return monthSummaryRepository.findByTrainerUsernameAndYearAndMonth(username, year, month)
-                .orElseThrow(() -> new ResourceNotFoundException(
-                        "Workload not found for trainer: " + username +
-                                " for period: " + year + "/" + month));
-    }
-
-    /**
-     * Delete a workload entry for a trainer
-     *
-     * @param username The trainer's username
-     * @param year The year to delete
-     * @param month The month to delete
-     * @throws ResourceNotFoundException if the trainer or workload entry doesn't exist
-     */
-    @Transactional
-    public void deleteWorkload(String username, int year, int month) {
-        logger.debug("Deleting workload for trainer: {}, period: {}/{}",
-                username, year, month);
-
-        // Find trainer
-        TrainerWorkload trainer = trainerWorkloadRepository.findById(username)
-                .orElseThrow(() -> new ResourceNotFoundException("Trainer not found: " + username));
-
-        // Find year
-        YearSummary yearSummary = trainer.getYears().stream()
-                .filter(y -> y.getYear() == year)
-                .findFirst()
-                .orElseThrow(() -> new ResourceNotFoundException(
-                        "Workload not found for trainer: " + username + " for year: " + year));
-
-        // Find month
-        MonthSummary monthSummary = yearSummary.getMonths().stream()
-                .filter(m -> m.getMonth() == month)
-                .findFirst()
-                .orElseThrow(() -> new ResourceNotFoundException(
-                        "Workload not found for trainer: " + username +
-                                " for period: " + year + "/" + month));
-
-        // Remove month
-        yearSummary.getMonths().remove(monthSummary);
-
-        // If year is now empty, remove it too
-        if (yearSummary.getMonths().isEmpty()) {
-            trainer.getYears().remove(yearSummary);
-        }
-
-        // Save
-        trainerWorkloadRepository.save(trainer);
-    }
-
-    /**
-     * Add to a trainer's workload for a specific month
-     *
-     * @param username The trainer's username
-     * @param year The year
-     * @param month The month
-     * @param duration The duration to add in minutes
-     * @return The updated trainer workload
-     * @throws ResourceNotFoundException if the trainer doesn't exist
-     */
-    @Transactional
-    public TrainerWorkload addWorkload(String username, int year, int month, int duration) {
-        logger.debug("Adding {} minutes to workload for trainer: {}, period: {}/{}",
-                duration, username, year, month);
-
-        // Find trainer
-        TrainerWorkload trainer = trainerWorkloadRepository.findById(username)
-                .orElseThrow(() -> new ResourceNotFoundException("Trainer not found: " + username));
-
-        // Find or create year
-        YearSummary yearSummary = trainer.getYears().stream()
-                .filter(y -> y.getYear() == year)
-                .findFirst()
-                .orElseGet(() -> {
-                    YearSummary newYear = new YearSummary();
-                    newYear.setYear(year);
-                    newYear.setTrainerUsername(username);
-                    newYear.setMonths(new ArrayList<>());
-                    trainer.getYears().add(newYear);
-                    return newYear;
-                });
-
-        // Find or create month
-        MonthSummary monthSummary = yearSummary.getMonths().stream()
-                .filter(m -> m.getMonth() == month)
-                .findFirst()
-                .orElseGet(() -> {
-                    MonthSummary newMonth = new MonthSummary();
-                    newMonth.setMonth(month);
-                    newMonth.setYearId(yearSummary.getId());
-                    newMonth.setSummaryDuration(0);
-                    yearSummary.getMonths().add(newMonth);
-                    return newMonth;
-                });
-
-        // Add duration
-        int currentDuration = monthSummary.getSummaryDuration();
-        int newDuration = currentDuration + duration;
-        monthSummary.setSummaryDuration(newDuration);
-
-        // Save and return
-        return trainerWorkloadRepository.save(trainer);
-    }
-
-    /**
-     * Subtract from a trainer's workload for a specific month
-     *
-     * @param username The trainer's username
-     * @param year The year
-     * @param month The month
-     * @param duration The duration to subtract in minutes
-     * @return The updated trainer workload
-     * @throws ResourceNotFoundException if the trainer or workload entry doesn't exist
-     * @throws InsufficientWorkloadException if the remaining workload would be negative
-     */
-    @Transactional
-    public TrainerWorkload subtractWorkload(String username, int year, int month, int duration) {
-        logger.debug("Subtracting {} minutes from workload for trainer: {}, period: {}/{}",
-                duration, username, year, month);
-
-        // Find trainer
-        TrainerWorkload trainer = trainerWorkloadRepository.findById(username)
-                .orElseThrow(() -> new ResourceNotFoundException("Trainer not found: " + username));
-
-        // Find year
-        YearSummary yearSummary = trainer.getYears().stream()
-                .filter(y -> y.getYear() == year)
-                .findFirst()
-                .orElseThrow(() -> new ResourceNotFoundException(
-                        "Workload not found for trainer: " + username + " for year: " + year));
-
-        // Find month
-        MonthSummary monthSummary = yearSummary.getMonths().stream()
-                .filter(m -> m.getMonth() == month)
-                .findFirst()
-                .orElseThrow(() -> new ResourceNotFoundException(
-                        "Workload not found for trainer: " + username +
-                                " for period: " + year + "/" + month));
-
-        // Check if there's enough duration to subtract
-        int currentDuration = monthSummary.getSummaryDuration();
-        if (currentDuration < duration) {
-            throw new InsufficientWorkloadException(
-                    String.format("Cannot subtract %d minutes from current workload of %d minutes for trainer: %s for period: %d/%d",
-                            duration, currentDuration, username, year, month));
-        }
-
-        // Subtract duration
-        int newDuration = currentDuration - duration;
-        monthSummary.setSummaryDuration(newDuration);
-
-        // If duration becomes zero, consider removing the month
-        if (newDuration == 0) {
-            yearSummary.getMonths().remove(monthSummary);
-
-            // If year is now empty, remove it too
-            if (yearSummary.getMonths().isEmpty()) {
-                trainer.getYears().remove(yearSummary);
-            }
-        }
-
-        // Save and return
-        return trainerWorkloadRepository.save(trainer);
-    }
-
-    public List<TrainerWorkloadResponse> getAllTrainerWorkloads() {
-        logger.info("Getting all trainer workloads");
-
-        // Get all trainers from repository
-        List<TrainerWorkload> trainers = trainerWorkloadRepository.findAll();
-        logger.info("Found {} trainers in database", trainers.size());
-
-        if (trainers.isEmpty()) {
-            logger.warn("No trainers found in database");
-            return new ArrayList<>();
-        }
-
-        // Log details about each trainer
-        for (TrainerWorkload trainer : trainers) {
-            logger.info("Trainer: {}, First Name: {}, Last Name: {}, Active: {}, Years: {}",
-                    trainer.getUsername(),
-                    trainer.getFirstName(),
-                    trainer.getLastName(),
-                    trainer.isActive(),
-                    trainer.getYears().size());
-        }
-
-        // Convert to response objects
-        List<TrainerWorkloadResponse> responses = trainers.stream()
-                .map(this::convertToTrainerWorkloadResponse)
-                .collect(Collectors.toList());
-
-        logger.info("Returning {} trainer workload responses", responses.size());
-        return responses;
-    }
-
-    private TrainerWorkloadResponse convertToTrainerWorkloadResponse(TrainerWorkload trainer) {
-        TrainerWorkloadResponse response = new TrainerWorkloadResponse();
-
-        response.setUsername(trainer.getUsername());
-        response.setFirstName(trainer.getFirstName());
-        response.setLastName(trainer.getLastName());
-        response.setActive(trainer.isActive());
-
-        // Convert years
-        List<TrainerWorkloadResponse.YearSummaryDto> yearDtos = trainer.getYears().stream()
-                .map(this::convertYearSummaryToDto)
-                .collect(Collectors.toList());
-
-        response.setYears(yearDtos);
-
-        return response;
-    }
-
-    private TrainerWorkloadResponse.YearSummaryDto convertYearSummaryToDto(YearSummary year) {
-        TrainerWorkloadResponse.YearSummaryDto yearDto = new TrainerWorkloadResponse.YearSummaryDto(year.getYear());
-
-        // Convert months
-        List<TrainerWorkloadResponse.MonthSummaryDto> monthDtos = year.getMonths().stream()
-                .map(month -> convertMonthSummaryToDto(month))
-                .collect(Collectors.toList());
-
-        yearDto.setMonths(monthDtos);
-
-        return yearDto;
-    }
-
-    private TrainerWorkloadResponse.MonthSummaryDto convertMonthSummaryToDto(MonthSummary month) {
-        return new TrainerWorkloadResponse.MonthSummaryDto(
-                month.getMonth(),
-                month.getSummaryDuration()
-        );
-    }
-
-    /**
-     * Get the complete workload summary for a trainer
-     *
-     * @param username The trainer's username
-     * @return The trainer workload entity with all workload data
-     * @throws ResourceNotFoundException if the trainer is not found
-     */
-    public TrainerWorkload getTrainerWorkloadSummary(String username) {
-        logger.debug("Getting workload summary for trainer: {}", username);
-
-        return trainerWorkloadRepository.findById(username)
-                .orElseThrow(() -> new ResourceNotFoundException("Trainer not found: " + username));
+        // Use the existing method for MongoDB updates
+        updateWorkloadAtomic(message);
     }
 }

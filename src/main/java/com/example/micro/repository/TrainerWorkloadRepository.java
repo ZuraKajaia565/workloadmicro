@@ -1,13 +1,16 @@
 package com.example.micro.repository;
 
-import com.example.micro.model.TrainerWorkload;
-import org.springframework.data.jpa.repository.JpaRepository;
+import com.example.micro.document.TrainerWorkloadDocument;
+import org.springframework.data.mongodb.repository.MongoRepository;
+import org.springframework.data.mongodb.repository.Query;
 import org.springframework.stereotype.Repository;
 
-/**
- * Repository for trainer workload data
- */
+import java.util.List;
+import java.util.Optional;
+
 @Repository
-public interface TrainerWorkloadRepository extends JpaRepository<TrainerWorkload, String> {
-    // Standard JpaRepository methods are sufficient
+public interface TrainerWorkloadRepository extends MongoRepository<TrainerWorkloadDocument, String> {
+
+    // Find by firstName and lastName (will use the compound index)
+    List<TrainerWorkloadDocument> findByFirstNameAndLastName(String firstName, String lastName);
 }

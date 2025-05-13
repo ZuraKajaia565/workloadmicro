@@ -1,13 +1,12 @@
 package com.example.micro.messaging;
 
 import com.example.micro.config.JmsConfig;
-import com.example.micro.dto.WorkloadRequest;
 import com.example.micro.exception.MessageProcessingException;
 import com.example.micro.exception.ResourceNotFoundException;
 import com.example.micro.service.WorkloadService;
+import com.example.micro.service.WorkloadService;
 import jakarta.jms.JMSException;
 import jakarta.jms.Message;
-import java.util.List;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.slf4j.MDC;
@@ -19,21 +18,26 @@ import org.springframework.messaging.handler.annotation.Headers;
 import org.springframework.messaging.handler.annotation.Payload;
 import org.springframework.stereotype.Component;
 
+import java.util.List;
+
 @Component
 public class WorkloadMessageListener {
 
     private static final Logger logger = LoggerFactory.getLogger(WorkloadMessageListener.class);
 
     private final WorkloadService workloadService;
+    private final WorkloadService workloadMongoService;
     private final JmsTemplate jmsTemplate;
     private final MessageValidator messageValidator;
 
     @Autowired
     public WorkloadMessageListener(
             WorkloadService workloadService,
+            WorkloadService workloadMongoService,
             JmsTemplate jmsTemplate,
             MessageValidator messageValidator) {
         this.workloadService = workloadService;
+        this.workloadMongoService = workloadMongoService;
         this.jmsTemplate = jmsTemplate;
         this.messageValidator = messageValidator;
     }
@@ -64,14 +68,41 @@ public class WorkloadMessageListener {
 
         try {
             // Validate message
-            List<String> validationErrors = messageValidator.validateWorkloadMessage(message);
-            if (!validationErrors.isEmpty()) {
-                String errorReason = String.join("; ", validationErrors);
-                logger.warn("Message validation failed: {}", errorReason);
-                handleInvalidMessage(message, errorReason);
+            if (!validateMessage(message)) {
                 return;
             }
 
+            // Process message for relational database
+            processMessageForRelationalDB(message);
+
+            // Process message for MongoDB
+            workloadMongoService.processWorkloadMessage(message);
+
+            // Acknowledge message on successful processing
+            acknowledgeMessage(jmsMessage, transactionId);
+        } catch (Exception e) {
+            handleProcessingException(e, message);
+        } finally {
+            MDC.clear();
+        }
+    }
+
+    private boolean validateMessage(WorkloadMessage message) {
+        List<String> validationErrors = messageValidator.validateWorkloadMessage(message);
+        if (!validationErrors.isEmpty()) {
+            String errorReason = String.join("; ", validationErrors);
+            logger.warn("Message validation failed: {}", errorReason);
+            handleInvalidMessage(message, errorReason);
+            return false;
+        }
+        return true;
+    }
+
+    private void processMessageForRelationalDB(WorkloadMessage message) {
+        logger.info("Processing message for relational database: trainer={}, period={}/{}",
+                message.getUsername(), message.getYear(), message.getMonth());
+
+        try {
             // Process message based on type
             switch (message.getMessageType()) {
                 case CREATE_UPDATE:
@@ -82,31 +113,11 @@ public class WorkloadMessageListener {
                     break;
                 default:
                     handleInvalidMessage(message, "Unknown message type: " + message.getMessageType());
-                    return;
+                    break;
             }
-
-            // Acknowledge message on successful processing
-            try {
-                jmsMessage.acknowledge();
-                logger.info("Message processed successfully, transaction ID: {}", transactionId);
-            } catch (JMSException e) {
-                logger.error("Error acknowledging message: {}", e.getMessage(), e);
-            }
-
-        } catch (ResourceNotFoundException e) {
-            // Handle resource not found - this is a "business" exception, not a system error
-            logger.warn("Resource not found while processing message: {}", e.getMessage());
-            // No need to send to DLQ - it's an expected scenario
-        } catch (MessageProcessingException e) {
-            // Handle specific message processing exceptions
-            logger.error("Message processing failed: {}", e.getMessage(), e);
-            handleInvalidMessage(message, "Processing error: " + e.getMessage());
         } catch (Exception e) {
-            // Handle unexpected exceptions
-            logger.error("Unexpected error while processing message: {}", e.getMessage(), e);
-            handleInvalidMessage(message, "Unexpected error: " + e.getMessage());
-        } finally {
-            MDC.clear();
+            logger.error("Error processing message for relational database: {}", e.getMessage(), e);
+            throw e;
         }
     }
 
@@ -121,14 +132,6 @@ public class WorkloadMessageListener {
                 message.getUsername(), message.getYear(), message.getMonth());
 
         try {
-            // Create workload request from message
-            WorkloadRequest request = new WorkloadRequest(
-                    message.getFirstName(),
-                    message.getLastName(),
-                    message.isActive(),
-                    message.getTrainingDuration()
-            );
-
             // Update or create workload
             workloadService.updateOrCreateWorkload(
                     message.getUsername(),
@@ -170,6 +173,31 @@ public class WorkloadMessageListener {
         } catch (Exception e) {
             logger.error("Unexpected error during workload deletion: {}", e.getMessage(), e);
             throw new MessageProcessingException("Failed to delete workload: " + e.getMessage(), e);
+        }
+    }
+
+    private void acknowledgeMessage(Message jmsMessage, String transactionId) {
+        try {
+            jmsMessage.acknowledge();
+            logger.info("Message processed successfully, transaction ID: {}", transactionId);
+        } catch (JMSException e) {
+            logger.error("Error acknowledging message: {}", e.getMessage(), e);
+        }
+    }
+
+    private void handleProcessingException(Exception e, WorkloadMessage message) {
+        if (e instanceof ResourceNotFoundException) {
+            // Handle resource not found - this is a "business" exception, not a system error
+            logger.warn("Resource not found while processing message: {}", e.getMessage());
+            // No need to send to DLQ - it's an expected scenario
+        } else if (e instanceof MessageProcessingException) {
+            // Handle specific message processing exceptions
+            logger.error("Message processing failed: {}", e.getMessage(), e);
+            handleInvalidMessage(message, "Processing error: " + e.getMessage());
+        } else {
+            // Handle unexpected exceptions
+            logger.error("Unexpected error while processing message: {}", e.getMessage(), e);
+            handleInvalidMessage(message, "Unexpected error: " + e.getMessage());
         }
     }
 
