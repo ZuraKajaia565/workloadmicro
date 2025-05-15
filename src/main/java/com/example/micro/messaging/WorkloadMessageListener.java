@@ -50,10 +50,10 @@ public class WorkloadMessageListener {
      * @param headers Message headers
      * @param jmsMessage The raw JMS message
      */
-    @JmsListener(
+   /* @JmsListener(
             destination = JmsConfig.WORKLOAD_QUEUE,
             containerFactory = "jmsListenerContainerFactory"
-    )
+    ) */
     public void processWorkloadMessage(
             @Payload WorkloadMessage message,
             @Headers MessageHeaders headers,
