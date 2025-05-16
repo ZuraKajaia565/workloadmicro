@@ -7,8 +7,9 @@ import org.junit.runner.RunWith;
 @RunWith(Cucumber.class)
 @CucumberOptions(
         features = "classpath:features/integration",
-        glue = {"com.zura.workload.integration.stepdefs"}, // This package path is incorrect
+        glue = {"com.example.micro.integration.stepdefs"},  // Fixed package path
         plugin = {"pretty", "html:target/cucumber-reports/integration"}
 )
 public class IntegrationTestRunner {
+    // Empty class body
 }

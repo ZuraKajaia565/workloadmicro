@@ -11,4 +11,5 @@ import org.junit.runner.RunWith;
         plugin = {"pretty", "html:target/cucumber-reports/component"}
 )
 public class ComponentTestRunner {
+        // Empty class body
 }

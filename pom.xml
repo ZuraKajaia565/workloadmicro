@@ -128,7 +128,6 @@
 			<scope>test</scope>
 		</dependency>
 
-		<!-- Cucumber Testing -->
 		<dependency>
 			<groupId>io.cucumber</groupId>
 			<artifactId>cucumber-java</artifactId>
@@ -240,6 +239,7 @@
 					</excludes>
 				</configuration>
 			</plugin>
+
 		</plugins>
 	</build>
 </project>
