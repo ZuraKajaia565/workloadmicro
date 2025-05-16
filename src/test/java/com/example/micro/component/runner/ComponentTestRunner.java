@@ -1,4 +1,3 @@
-// src/test/java/com/example/micro/component/runners/ComponentTestRunner.java
 package com.example.micro.component.runner;
 
 import io.cucumber.junit.Cucumber;
