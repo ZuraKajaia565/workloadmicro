@@ -223,11 +223,10 @@
 						<include>**/*Test.java</include>
 						<include>**/*IT.java</include>
 						<include>**/*CucumberRunner.java</include>
+						<include>**/*TestRunner.java</include>
 					</includes>
 				</configuration>
 			</plugin>
-
-
 
 			<plugin>
 				<groupId>org.springframework.boot</groupId>
