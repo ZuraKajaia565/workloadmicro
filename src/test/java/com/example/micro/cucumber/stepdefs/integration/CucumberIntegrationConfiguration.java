@@ -9,7 +9,7 @@ import org.springframework.test.context.ActiveProfiles;
  * Spring context configuration for integration tests.
  * This MUST be in the same package as the step definitions for integration tests.
  */
-@CucumberContextConfiguration
+
 @SpringBootTest(
         classes = MicroApplication.class,
         webEnvironment = SpringBootTest.WebEnvironment.RANDOM_PORT
