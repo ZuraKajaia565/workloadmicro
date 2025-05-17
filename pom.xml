@@ -81,6 +81,7 @@
 			<artifactId>jjwt-api</artifactId>
 			<version>${jwt.version}</version>
 		</dependency>
+
 		<dependency>
 			<groupId>io.jsonwebtoken</groupId>
 			<artifactId>jjwt-impl</artifactId>
@@ -162,6 +163,7 @@
 			<version>1.19.0</version>
 			<scope>test</scope>
 		</dependency>
+
 		<dependency>
 			<groupId>org.testcontainers</groupId>
 			<artifactId>mongodb</artifactId>
@@ -217,14 +219,21 @@
 			<plugin>
 				<groupId>org.apache.maven.plugins</groupId>
 				<artifactId>maven-surefire-plugin</artifactId>
+				<version>3.1.2</version>
 				<configuration>
 					<includes>
 						<include>**/*Test.java</include>
-						<include>**/*IT.java</include>
-						<include>**/*CucumberRunner.java</include>
+						<include>**/*Tests.java</include>
 						<include>**/*TestRunner.java</include>
 					</includes>
 				</configuration>
+				<dependencies>
+					<dependency>
+						<groupId>org.apache.maven.surefire</groupId>
+						<artifactId>surefire-junit47</artifactId>
+						<version>3.1.2</version>
+					</dependency>
+				</dependencies>
 			</plugin>
 
 			<plugin>

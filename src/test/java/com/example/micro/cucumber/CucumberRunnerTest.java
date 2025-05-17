@@ -1,3 +1,4 @@
+// Replace src/test/java/com/example/micro/cucumber/CucumberRunnerTest.java
 package com.example.micro.cucumber;
 
 import io.cucumber.junit.Cucumber;
@@ -8,8 +9,8 @@ import org.junit.runner.RunWith;
 @CucumberOptions(
         // Define features location
         features = "src/test/resources/features",
-        // Specify the correct package for step definitions
-        glue = {"com.example.micro.cucumber.stepdefs"},
+        // Specify the correct package for step definitions and include the configuration class
+        glue = {"com.example.micro.cucumber.stepdefs", "com.example.micro.cucumber"},
         // Add plugins for reporting
         plugin = {
                 "pretty",
@@ -18,5 +19,5 @@ import org.junit.runner.RunWith;
         }
 )
 public class CucumberRunnerTest {
-        // Empty class body
+    // Empty class body
 }
