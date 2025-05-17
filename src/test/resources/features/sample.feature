@@ -1,4 +1,3 @@
-# src/test/resources/features/sample.feature
 Feature: Sample feature
 
   Scenario: Simple test scenario

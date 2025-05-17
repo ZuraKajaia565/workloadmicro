@@ -1,4 +1,3 @@
-// src/test/java/com/example/micro/cucumber/stepdefs/SampleStepDefs.java
 package com.example.micro.cucumber.stepdefs;
 
 import io.cucumber.java.en.Given;
@@ -6,6 +5,9 @@ import io.cucumber.java.en.When;
 import io.cucumber.java.en.Then;
 import static org.junit.Assert.assertTrue;
 
+/**
+ * Step definitions for the sample.feature file
+ */
 public class SampleStepDefs {
 
     @Given("I have a simple test")

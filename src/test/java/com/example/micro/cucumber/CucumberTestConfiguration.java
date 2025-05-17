@@ -1,15 +1,15 @@
-// Create this new file in: src/test/java/com/example/micro/cucumber/CucumberTestConfiguration.java
 package com.example.micro.cucumber;
 
 import org.springframework.boot.test.context.SpringBootTest;
+import org.springframework.context.annotation.Import;
 import org.springframework.test.context.ActiveProfiles;
 import io.cucumber.spring.CucumberContextConfiguration;
-import com.example.micro.MicroApplication;
+import com.example.micro.config.MongoTestConfig;
 
 @CucumberContextConfiguration
-@SpringBootTest(classes = MicroApplication.class, webEnvironment = SpringBootTest.WebEnvironment.RANDOM_PORT)
+@SpringBootTest
 @ActiveProfiles("test")
+@Import(MongoTestConfig.class)  // Import our MongoDB test config
 public class CucumberTestConfiguration {
-        // This class serves as a bridge between Cucumber and Spring Boot
-        // It's required for proper context loading in Cucumber tests
+    // No changes needed here
 }
