@@ -1,4 +1,3 @@
-// src/test/java/com/example/micro/cucumber/stepdefs/WorkloadManagementStepDefs.java
 package com.example.micro.cucumber.stepdefs;
 
 import com.example.micro.document.TrainerWorkloadDocument;

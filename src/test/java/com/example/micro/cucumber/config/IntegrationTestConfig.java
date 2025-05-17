@@ -1,4 +1,3 @@
-// src/test/java/com/example/micro/cucumber/config/IntegrationTestConfig.java
 package com.example.micro.cucumber.config;
 
 import com.example.micro.config.JmsConfig;
@@ -14,7 +13,6 @@ import org.springframework.jms.support.converter.MappingJackson2MessageConverter
 import org.springframework.jms.support.converter.MessageConverter;
 import org.springframework.jms.support.converter.MessageType;
 
-// Use Jakarta EE JMS packages instead of javax.jms
 import jakarta.jms.ConnectionFactory;
 import jakarta.jms.Queue;
 import java.util.HashMap;

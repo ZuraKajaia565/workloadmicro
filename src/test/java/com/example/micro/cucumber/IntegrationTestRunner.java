@@ -1,4 +1,3 @@
-// src/test/java/com/example/micro/cucumber/IntegrationTestRunner.java
 package com.example.micro.cucumber;
 
 import io.cucumber.junit.Cucumber;
@@ -17,5 +16,5 @@ import org.junit.runner.RunWith;
         tags = "not @skip"
 )
 public class IntegrationTestRunner {
-    // Empty class - just a runner
+        // Empty class - just a runner
 }
