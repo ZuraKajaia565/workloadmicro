@@ -34,6 +34,14 @@
 			<version>4.7.0</version>
 			<scope>test</scope>
 		</dependency>
+
+		<dependency>
+			<groupId>org.junit.vintage</groupId>
+			<artifactId>junit-vintage-engine</artifactId>
+			<version>5.10.2</version>
+			<scope>test</scope>
+		</dependency>
+
 		<dependency>
 			<groupId>de.flapdoodle.embed</groupId>
 			<artifactId>de.flapdoodle.embed.mongo.spring30x</artifactId>
@@ -238,6 +246,7 @@
 
 	<build>
 		<plugins>
+
 			<plugin>
 				<groupId>org.apache.maven.plugins</groupId>
 				<artifactId>maven-surefire-plugin</artifactId>
@@ -245,11 +254,11 @@
 				<configuration>
 					<includes>
 						<include>**/*Test.java</include>
-						<include>**/*Tests.java</include>
-						<include>**/*TestRunner.java</include>
+						<include>**/*Runner.java</include>
 					</includes>
 				</configuration>
 			</plugin>
+
 
 			<plugin>
 				<groupId>org.springframework.boot</groupId>

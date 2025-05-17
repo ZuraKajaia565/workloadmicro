@@ -4,6 +4,11 @@ import io.cucumber.junit.Cucumber;
 import io.cucumber.junit.CucumberOptions;
 import org.junit.runner.RunWith;
 
+/**
+ * Runner for integration tests.
+ * Note: We're using ONLY the com.example.micro.cucumber.stepdefs.integration package
+ * to avoid duplicate step definitions.
+ */
 @RunWith(Cucumber.class)
 @CucumberOptions(
         features = "src/test/resources/features/integration",
@@ -16,5 +21,5 @@ import org.junit.runner.RunWith;
         tags = "@integration"  // Only run scenarios tagged with @integration
 )
 public class IntegrationTestRunner {
-        // This class serves as a test runner for integration tests
+    // This class serves as a test runner for integration tests
 }
