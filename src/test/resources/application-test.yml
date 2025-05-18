@@ -1,0 +1,16 @@
+spring:
+  security:
+    jwt:
+      enabled: false  # Disable JWT validation in tests
+
+  # Database configuration for tests if you're using MongoDB
+  data:
+    mongodb:
+      database: workload-test
+      port: 27017
+      host: localhost
+      auto-index-creation: true
+
+# Tests can use a random port
+server:
+  port: 0

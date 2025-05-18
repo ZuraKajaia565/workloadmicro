@@ -67,6 +67,19 @@ public class WorkloadService {
         }
     }
 
+    // In WorkloadService.java
+    public boolean workloadExists(String username, Integer year, Integer month) {
+        // Implement logic to check if workload exists
+        // This depends on your data access layer
+        try {
+            // Example implementation (adjust according to your repository structure)
+            return workloadRepository.findByUsernameAndYearAndMonth(username, year, month) != null;
+        } catch (Exception e) {
+            logger.error("Error checking if workload exists for trainer: {}, period: {}/{}", username, year, month, e);
+            return false;
+        }
+    }
+
     /**
      * Update workload using MongoDB's atomic operations
      * This is more efficient for large documents as it avoids fetching the entire document

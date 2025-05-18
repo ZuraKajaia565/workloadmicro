@@ -28,12 +28,7 @@
 			<artifactId>junit-jupiter-engine</artifactId>
 			<scope>test</scope>
 		</dependency>
-		<dependency>
-			<groupId>de.flapdoodle.embed</groupId>
-			<artifactId>de.flapdoodle.embed.mongo</artifactId>
-			<version>4.7.0</version>
-			<scope>test</scope>
-		</dependency>
+
 
 		<dependency>
 			<groupId>org.junit.vintage</groupId>
@@ -42,12 +37,6 @@
 			<scope>test</scope>
 		</dependency>
 
-		<dependency>
-			<groupId>de.flapdoodle.embed</groupId>
-			<artifactId>de.flapdoodle.embed.mongo.spring30x</artifactId>
-			<version>4.7.0</version>
-			<scope>test</scope>
-		</dependency>
 		<!-- Spring Boot Core Dependencies -->
 		<dependency>
 			<groupId>org.springframework.boot</groupId>
