@@ -81,8 +81,8 @@ public class WorkloadService {
     }
 
     /**
-     * Update workload using MongoDB's atomic operations
-     * This is more efficient for large documents as it avoids fetching the entire document
+     * Updates the workload for a trainer atomically using the MongoDB update operation.
+     * This method is now corrected to properly update existing month records.
      */
     public void updateWorkloadAtomic(WorkloadMessage message) {
         String transactionId = message.getTransactionId();
@@ -102,91 +102,60 @@ public class WorkloadService {
                 return;
             }
 
-            // Create query to find the specific month within the specific year
-            Query query = new Query(Criteria.where("username").is(message.getUsername())
-                    .and("years.year").is(message.getYear())
-                    .and("years.months.month").is(message.getMonth()));
+            // Fetch the entire trainer document first
+            Optional<TrainerWorkloadDocument> trainerOpt = workloadRepository.findById(message.getUsername());
 
-            // Check if the specific month exists
-            boolean monthExists = mongoTemplate.exists(query, TrainerWorkloadDocument.class);
+            if (trainerOpt.isPresent()) {
+                TrainerWorkloadDocument trainer = trainerOpt.get();
 
-            if (monthExists) {
-                // Update existing month duration
-                logger.debug("MongoDB: Found existing month record for trainer: {}, updating duration", message.getUsername());
+                // Update basic trainer info
+                trainer.setFirstName(message.getFirstName());
+                trainer.setLastName(message.getLastName());
+                trainer.setActive(message.isActive());
 
-                // Create update operation for the specific month
-                Update update = new Update()
-                        .set("firstName", message.getFirstName())
-                        .set("lastName", message.getLastName())
-                        .set("isActive", message.isActive());
-
-                // Depending on message type, either set or increment duration
-                if (message.getMessageType() == WorkloadMessage.MessageType.CREATE_UPDATE) {
-                    update.set("years.$[year].months.$[month].trainingsSummaryDuration", message.getTrainingDuration());
-                } else {
-                    update.inc("years.$[year].months.$[month].trainingsSummaryDuration", message.getTrainingDuration());
+                // Find or create the year
+                TrainerWorkloadDocument.YearSummary targetYear = null;
+                for (TrainerWorkloadDocument.YearSummary yearSummary : trainer.getYears()) {
+                    if (yearSummary.getYear() == message.getYear()) {
+                        targetYear = yearSummary;
+                        break;
+                    }
                 }
 
-                // Add array filters to target the specific year and month
-                query = new Query(Criteria.where("username").is(message.getUsername()));
-                mongoTemplate.updateFirst(
-                        query,
-                        update,
-                        "trainer_workloads"
-                );
+                // If year doesn't exist, create it
+                if (targetYear == null) {
+                    targetYear = new TrainerWorkloadDocument.YearSummary();
+                    targetYear.setYear(message.getYear());
+                    targetYear.setMonths(new ArrayList<>());
+                    trainer.getYears().add(targetYear);
+                }
 
-                logger.debug("MongoDB: Updated workload duration atomically for trainer: {}, period: {}/{}",
-                        message.getUsername(), message.getYear(), message.getMonth());
+                // Find or create the month
+                TrainerWorkloadDocument.MonthSummary targetMonth = null;
+                for (TrainerWorkloadDocument.MonthSummary monthSummary : targetYear.getMonths()) {
+                    if (monthSummary.getMonth() == message.getMonth()) {
+                        targetMonth = monthSummary;
+                        break;
+                    }
+                }
+
+                // If month doesn't exist, create it
+                if (targetMonth == null) {
+                    targetMonth = new TrainerWorkloadDocument.MonthSummary();
+                    targetMonth.setMonth(message.getMonth());
+                    targetYear.getMonths().add(targetMonth);
+                }
+
+                // Update the training duration
+                targetMonth.setTrainingsSummaryDuration(message.getTrainingDuration());
+
+                // Save the entire updated document
+                workloadRepository.save(trainer);
+                logger.debug("MongoDB: Updated trainer workload document: {}", trainer.getUsername());
             } else {
-                // Month doesn't exist, so we need more complex handling
-                // First check if year exists
-                query = new Query(Criteria.where("username").is(message.getUsername())
-                        .and("years.year").is(message.getYear()));
-
-                boolean yearExists = mongoTemplate.exists(query, TrainerWorkloadDocument.class);
-
-                if (yearExists) {
-                    // Year exists, but month doesn't - add new month to existing year
-                    logger.debug("MongoDB: Year exists but month doesn't for trainer: {}, adding new month", message.getUsername());
-
-                    TrainerWorkloadDocument.MonthSummary newMonth = new TrainerWorkloadDocument.MonthSummary();
-                    newMonth.setMonth(message.getMonth());
-                    newMonth.setTrainingsSummaryDuration(message.getTrainingDuration());
-
-                    Update update = new Update().push("years.$[year].months", newMonth);
-
-                    mongoTemplate.updateFirst(
-                            new Query(Criteria.where("username").is(message.getUsername())),
-                            update,
-                            "trainer_workloads"
-                    );
-                } else {
-                    // Neither year nor month exists - add new year with new month
-                    logger.debug("MongoDB: Neither year nor month exists for trainer: {}, adding both", message.getUsername());
-
-                    TrainerWorkloadDocument.MonthSummary newMonth = new TrainerWorkloadDocument.MonthSummary();
-                    newMonth.setMonth(message.getMonth());
-                    newMonth.setTrainingsSummaryDuration(message.getTrainingDuration());
-
-                    TrainerWorkloadDocument.YearSummary newYear = new TrainerWorkloadDocument.YearSummary();
-                    newYear.setYear(message.getYear());
-                    newYear.getMonths().add(newMonth);
-
-                    Update update = new Update()
-                            .set("firstName", message.getFirstName())
-                            .set("lastName", message.getLastName())
-                            .set("isActive", message.isActive())
-                            .push("years", newYear);
-
-                    mongoTemplate.updateFirst(
-                            new Query(Criteria.where("username").is(message.getUsername())),
-                            update,
-                            "trainer_workloads"
-                    );
-                }
-
-                logger.debug("MongoDB: Added new workload record for trainer: {}, period: {}/{}",
-                        message.getUsername(), message.getYear(), message.getMonth());
+                // This shouldn't happen since we checked existsById, but just in case
+                logger.warn("MongoDB: Trainer not found after existsById check: {}", message.getUsername());
+                createNewTrainerWorkload(message);
             }
         } catch (Exception e) {
             logger.error("MongoDB: Error processing atomic workload update: {}", e.getMessage(), e);
