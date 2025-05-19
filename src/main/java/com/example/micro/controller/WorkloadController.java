@@ -19,7 +19,10 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.*;
 
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
+import java.util.Optional;
 import java.util.stream.Collectors;
 
 @RestController
@@ -66,6 +69,107 @@ public class WorkloadController {
             return ResponseEntity.ok(trainers);
         } catch (Exception e) {
             logger.error("Error searching trainers: {}", e.getMessage(), e);
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
+                    .body("Error: " + e.getMessage());
+        }
+
+    }
+
+    @PutMapping("/{year}/{month}")
+    @PreAuthorize("isAuthenticated()")
+    public ResponseEntity<?> createOrUpdateWorkload(
+            @PathVariable String username,
+            @PathVariable int year,
+            @PathVariable int month,
+            @Valid @RequestBody WorkloadRequest request) {
+
+        logger.info("Creating/updating workload for trainer: {}, period: {}/{}", username, year, month);
+
+        try {
+            workloadService.updateOrCreateWorkload(
+                    username,
+                    year,
+                    month,
+                    request.getFirstName(),
+                    request.getLastName(),
+                    request.isActive(),
+                    request.getTrainingDuration()
+            );
+
+            return ResponseEntity.ok().build();
+        } catch (ResourceNotFoundException e) {
+            logger.warn("Trainer not found: {}", e.getMessage());
+            return ResponseEntity.notFound().build();
+        } catch (Exception e) {
+            logger.error("Error creating/updating workload: {}", e.getMessage(), e);
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
+                    .body("Error: " + e.getMessage());
+        }
+    }
+
+    @DeleteMapping("/{year}/{month}")
+    @PreAuthorize("isAuthenticated()")
+    public ResponseEntity<?> deleteWorkload(
+            @PathVariable String username,
+            @PathVariable int year,
+            @PathVariable int month) {
+
+        logger.info("Deleting workload for trainer: {}, period: {}/{}", username, year, month);
+
+        try {
+            workloadService.deleteWorkload(username, year, month);
+            return ResponseEntity.ok().build();
+        } catch (ResourceNotFoundException e) {
+            logger.warn("Resource not found: {}", e.getMessage());
+            return ResponseEntity.notFound().build();
+        } catch (Exception e) {
+            logger.error("Error deleting workload: {}", e.getMessage(), e);
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
+                    .body("Error: " + e.getMessage());
+        }
+    }
+
+    @GetMapping("/{year}/{month}")
+    @PreAuthorize("isAuthenticated()")
+    public ResponseEntity<?> getMonthlyWorkload(
+            @PathVariable String username,
+            @PathVariable int year,
+            @PathVariable int month) {
+
+        logger.info("Retrieving monthly workload for trainer: {}, period: {}/{}",
+                username, year, month);
+
+        try {
+            // This is just an example - implement the actual method based on your needs
+            Optional<TrainerWorkloadDocument> trainerOpt = workloadRepository.findById(username);
+
+            if (trainerOpt.isEmpty()) {
+                return ResponseEntity.notFound().build();
+            }
+
+            TrainerWorkloadDocument trainer = trainerOpt.get();
+
+            // Find the year and month
+            for (TrainerWorkloadDocument.YearSummary yearSummary : trainer.getYears()) {
+                if (yearSummary.getYear() == year) {
+                    for (TrainerWorkloadDocument.MonthSummary monthSummary : yearSummary.getMonths()) {
+                        if (monthSummary.getMonth() == month) {
+                            // Create and return response
+                            Map<String, Object> response = new HashMap<>();
+                            response.put("username", username);
+                            response.put("year", year);
+                            response.put("month", month);
+                            response.put("minutes", monthSummary.getTrainingsSummaryDuration());
+
+                            return ResponseEntity.ok(response);
+                        }
+                    }
+                }
+            }
+
+            return ResponseEntity.notFound().build();
+        } catch (Exception e) {
+            logger.error("Error retrieving monthly workload: {}", e.getMessage(), e);
             return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
                     .body("Error: " + e.getMessage());
         }
