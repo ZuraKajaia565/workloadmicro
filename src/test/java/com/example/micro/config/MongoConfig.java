@@ -1,4 +1,3 @@
-// src/main/java/com/example/micro/config/MongoConfig.java
 package com.example.micro.config;
 
 import com.mongodb.client.MongoClient;

@@ -1,4 +1,4 @@
-# src/test/resources/features/workload_management.feature
+# src/test/resources/features/component/workload_management.feature
 Feature: Trainer Workload Management
   As a gym manager
   I want to track trainer workloads

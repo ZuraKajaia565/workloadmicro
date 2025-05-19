@@ -9,6 +9,7 @@ import com.example.micro.exception.ResourceNotFoundException;
 import com.example.micro.model.MonthSummary;
 import com.example.micro.model.TrainerWorkload;
 import com.example.micro.model.YearSummary;
+import com.example.micro.repository.TrainerWorkloadRepository;
 import com.example.micro.service.WorkloadService;
 import jakarta.validation.Valid;
 import org.slf4j.Logger;
@@ -32,10 +33,12 @@ public class WorkloadController {
     private static final Logger logger = LoggerFactory.getLogger(WorkloadController.class);
 
     private final WorkloadService workloadService;
+    private final TrainerWorkloadRepository workloadRepository;
 
     @Autowired
-    public WorkloadController(WorkloadService workloadService) {
+    public WorkloadController(WorkloadService workloadService, TrainerWorkloadRepository workloadRepository) {
         this.workloadService = workloadService;
+        this.workloadRepository = workloadRepository;
     }
 
     @GetMapping
