@@ -26,6 +26,7 @@ import java.util.Optional;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
+import static org.junit.jupiter.api.Assertions.fail;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyInt;
 import static org.mockito.ArgumentMatchers.anyString;
@@ -223,18 +224,56 @@ public class WorkloadManagementComponentStepDefs {
     public void i_request_workload_for_username(String username) {
         this.username = username;
 
-        // Make API request
+        // Make API request with error handling
         String url = "/api/trainers/" + username + "/workloads";
-        response = restTemplate.exchange(
-                url,
-                HttpMethod.GET,
-                new HttpEntity<>(createHeaders()),
-                String.class
-        );
+        try {
+            response = restTemplate.exchange(
+                    url,
+                    HttpMethod.GET,
+                    new HttpEntity<>(createHeaders()),
+                    String.class
+            );
+        } catch (org.springframework.web.client.HttpClientErrorException e) {
+            // Store the error response instead of letting it throw
+            response = new ResponseEntity<>(e.getResponseBodyAsString(), e.getStatusCode());
+        }
     }
 
     @Then("the response should be not found")
     public void the_response_should_be_not_found() {
-        assertEquals(404, response.getStatusCodeValue(), "Expected 404 NOT_FOUND response");
+        // Check if response is null and handle it
+        if (response == null) {
+            fail("Response is null - request may have failed completely");
+        } else {
+            assertEquals(404, response.getStatusCodeValue(), "Expected 404 NOT_FOUND response");
+        }
+    }
+
+    @When("I try to update workload for username {string} for month {int} of year {int} in component test")
+    public void i_try_to_update_workload_for_nonexistent_username(String username, Integer month, Integer year) {
+        this.username = username;
+        this.month = month;
+        this.year = year;
+
+        // Create workload request
+        Map<String, Object> requestBody = new HashMap<>();
+        requestBody.put("firstName", "Test");
+        requestBody.put("lastName", "User");
+        requestBody.put("active", true);
+        requestBody.put("trainingDuration", 60);
+
+        // Make API request with error handling
+        String url = "/api/trainers/" + username + "/workloads/" + year + "/" + month;
+        try {
+            response = restTemplate.exchange(
+                    url,
+                    HttpMethod.PUT,
+                    new HttpEntity<>(requestBody, createHeaders()),
+                    String.class
+            );
+        } catch (org.springframework.web.client.HttpClientErrorException e) {
+            // Store the error response instead of letting it throw
+            response = new ResponseEntity<>(e.getResponseBodyAsString(), e.getStatusCode());
+        }
     }
 }

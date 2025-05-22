@@ -12,7 +12,7 @@ Feature: Workload Message Processing
       | username | firstName | lastName | isActive | year | month | trainingDuration |
       | trainer5 | John      | Doe      | true     | 2025 | 10    | 75               |
     Then the workload should be updated in the database
-    And the workload duration should be 75 minutes
+    And the workload message duration should be 75 minutes
 
   Scenario: Process a delete workload message
     Given a trainer with username "trainer6" exists

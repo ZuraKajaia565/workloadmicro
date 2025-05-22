@@ -17,7 +17,7 @@ import org.junit.runner.RunWith;
                 "html:target/cucumber-reports/cucumber.html",
                 "json:target/cucumber-reports/cucumber.json"
         },
-        tags = "not @integration"  // Exclude integration tests
+        tags = "not @integration and not @integration-test"  // Exclude all integration tests
 )
 public class CucumberRunnerTest {
     // Empty class body

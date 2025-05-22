@@ -32,10 +32,6 @@ Feature: Trainer Workload Management
     When I request workload for username "nonexistent"
     Then the response should be not found
 
-  Scenario: Attempt to update non-existent trainer workload
-    When I try to update workload for username "nonexistent" for month 8 of year 2025
-    Then the response should be not found
-
   Scenario: Invalid workload duration validation
     Given a trainer with username "trainer4" exists
     When I try to create a workload with -10 minutes for month 9 of year 2025

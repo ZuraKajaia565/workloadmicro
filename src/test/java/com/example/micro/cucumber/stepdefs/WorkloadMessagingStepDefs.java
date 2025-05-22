@@ -174,4 +174,29 @@ public class WorkloadMessagingStepDefs {
         // This would require a mock logger which is beyond scope here
         // In a real implementation, you would verify that an error was logged
     }
+
+    @And("the workload message duration should be {int} minutes")
+    public void theWorkloadMessageDurationShouldBeMinutes(Integer expectedMinutes) {
+        Optional<TrainerWorkloadDocument> trainerOpt = workloadRepository.findById(username);
+        assertTrue("Trainer should exist in repository", trainerOpt.isPresent());
+
+        TrainerWorkloadDocument trainer = trainerOpt.get();
+        boolean found = false;
+        int actualDuration = 0;
+
+        for (TrainerWorkloadDocument.YearSummary yearSummary : trainer.getYears()) {
+            if (yearSummary.getYear() == year) {
+                for (TrainerWorkloadDocument.MonthSummary monthSummary : yearSummary.getMonths()) {
+                    if (monthSummary.getMonth() == month) {
+                        found = true;
+                        actualDuration = monthSummary.getTrainingsSummaryDuration();
+                        break;
+                    }
+                }
+            }
+        }
+
+        assertTrue("Month should exist in workload", found);
+        assertEquals("Workload duration should match", expectedMinutes.intValue(), actualDuration);
+    }
 }
