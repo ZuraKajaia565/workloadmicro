@@ -1,0 +1,62 @@
+version: '3.8'
+
+services:
+  mongodb:
+    image: mongo:latest
+    container_name: mongodb
+    ports:
+      - "27017:27017"
+    volumes:
+      - mongodb_data:/data/db
+    networks:
+      - microservice-network
+
+  activemq:
+    image: rmohr/activemq:latest
+    container_name: activemq
+    ports:
+      - "61616:61616"  # JMS
+      - "8161:8161"    # Web console
+    networks:
+      - microservice-network
+
+  workload-service:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: workload-service
+    ports:
+      - "8083:8083"
+    environment:
+      - SPRING_DATA_MONGODB_URI=mongodb://mongodb:27017/workload
+      - SPRING_ACTIVEMQ_BROKER_URL=tcp://activemq:61616
+      - SPRING_PROFILES_ACTIVE=prod
+    depends_on:
+      - mongodb
+      - activemq
+    networks:
+      - microservice-network
+
+  report-service:
+    build:
+      context: .
+      dockerfile: Dockerfile.report
+    container_name: report-service
+    ports:
+      - "8084:8084"
+    environment:
+      - SPRING_DATA_MONGODB_URI=mongodb://mongodb:27017/report
+      - SPRING_ACTIVEMQ_BROKER_URL=tcp://activemq:61616
+      - SPRING_PROFILES_ACTIVE=prod
+    depends_on:
+      - mongodb
+      - activemq
+    networks:
+      - microservice-network
+
+networks:
+  microservice-network:
+    driver: bridge
+
+volumes:
+  mongodb_data:
