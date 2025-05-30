@@ -1,30 +1,8 @@
-# Multi-stage build for workload-service
-FROM eclipse-temurin:17-jdk-jammy as build
-WORKDIR /app
-
-# Copy maven wrapper and pom.xml
-COPY mvnw mvnw
-COPY .mvn/ .mvn/
-COPY pom.xml .
-
-# Make the maven wrapper executable
-RUN chmod +x ./mvnw
-
-# Download dependencies
-RUN ./mvnw dependency:go-offline -B
-
-# Copy source code
-COPY src/ src/
-
-# Build the application
-RUN ./mvnw package -DskipTests
-
-# Runtime stage
 FROM eclipse-temurin:17-jre-jammy
 WORKDIR /app
 
-# Copy the built jar from the build stage
-COPY --from=build /app/target/*.jar app.jar
+# Copy the pre-built fat JAR
+COPY target/*-exec.jar app.jar
 
 # Expose the application port
 EXPOSE 8083

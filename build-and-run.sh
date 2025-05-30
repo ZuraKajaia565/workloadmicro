@@ -1,5 +1,8 @@
 #!/bin/bash
 
+# Build the application with Maven
+./mvnw clean package
+
 # Stop and remove existing containers if they exist
 docker rm -f workload-service 2>/dev/null || true
 docker rm -f report-service 2>/dev/null || true
