@@ -1,5 +1,9 @@
 #!/bin/bash
 
+# Stop and remove existing containers if they exist
+docker rm -f workload-service 2>/dev/null || true
+docker rm -f report-service 2>/dev/null || true
+
 # Build the Docker images
 docker build -t workload-service:latest -f Dockerfile .
 docker build -t report-service:latest -f Dockerfile.report .
